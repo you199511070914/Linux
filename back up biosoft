@@ -1,0 +1,7 @@
+#install SPAdes
+wget http://cab.spbu.ru/files/release3.14.1/SPAdes-3.14.1.tar.gz
+
+#install Trycycler & find where is
+pip3 install git+https://github.com/rrwick/Trycycler.git
+trycycler --help
+whereis Trycycler
