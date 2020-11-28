@@ -1,1 +1,43 @@
+SRA文件转换成fastq文件
+我们从NCBI等数据库下载的原始数据很多为SRA格式，需要转换成fastq文件。常用工具为：NCBI SRA Toolkit
+fastq-dump --gzip --split-3 -O outputdir -A file1.sra
 
+for I in seq 56 62
+do
+fastq-dump --gzip –split-3 -O ./fastq/ -A SRR35899${I}.sra
+done
+
+--split-3：如果是双端测序数据，则输出两个文件，如果不是则只输出一个文件
+
+ fastqc -q -t 4 -o ./fastqc_result/ *.fastq.gz &
+ 
+ Adapter content，接头含量：在此处可查看数据中使用接头信息
+具体接头查询地点：github-fastqc 或者：Download common Illumina adapters
+
+
+根据FastQC质控报告，利用Trimmomatic软件处理数据。trimmomatic，是java软件，所以直接Google找到其官网，然后下载二进制版本解压即可使用！
+这个软件设计就是为了illumina的测序数据的，因为它自带的adaptor文件有限！一般只去除TruSeq Universal Adapter 这个接头，运行的时候，不报错才算是成功的！
+Paired End:
+java -jar trimmomatic-0.35.jar PE -phred33 input_forward.fq.gz input_reverse.fq.gz 
+output_forward_paired.fq.gz output_forward_unpaired.fq.gz 
+output_reverse_paired.fq.gz output_reverse_unpaired.fq.gz 
+ILLUMINACLIP:TruSeq3-PE.fa:2:30:10 
+LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 ## 所以只需要把参数放对位置即可！
+
+
+在 UCSC 下载 hg19 参考基因组；
+从 gencode 数据库下载基因注释文件，并且用 IGV 去查看感兴趣的基因的结构，比如TP53,KRAS,EGFR 等等。
+截图几个基因的 IGV 可视化结构
+下载 ENSEMBL，NCBI 的 gtf，也导入 IGV 看看，截图基因结构
+
+把整理好的数据和参考基因组序列进行比对，寻找每个reads的最佳匹配位置。可以使用HISAT2，tophat2，STAR等软件。
+
+htseq-count 是一款用于reads计数的软件，他能对位于基因组上的一些单位的reads数进行统计，这里所说的单位主要是指染色体上的一组位置区间（我们常见的就是gene exon）。
+基本用法：
+htseq-count [options] <alignment_file> <gff_file>
+参考gtf文件可以是gencode或者是ensembl数据库的，但是尤其要注释chr的问题，而且版本问题，gtf/gff格式无所谓。比对后的文件一定要进行sort，推荐一定要sort -n，根据reads的name来sort
+-f sam/bam: 如果对bam文件进行counts，必须保证服务器的python安装了正确的pysam模块
+-r name/pos: 一般情况下我们的bam都是按照参考基因组的pos来sort的，但是这个软件默认却是reads的name，很坑，一般建议重新把bam文件sort一下，而不是选择 -r pos，因为-r pos实在是太消耗内存了。
+-s yes/no/reverse, 这也是巨坑的参数，默认是yes，一般人拿到的数据都是no，所以千万要注意！！！
+-t 选择gff/gtf文件的第3列，一般是exon，也可以是gene，transcript ，这个很少调整的。
+-i 这个需要修改，不然默认是ensembl的基因ID，一般人看不懂，可以改为gene_name，前提是你的gff文件里面有gene_name这个属性。
