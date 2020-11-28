@@ -1,3 +1,11 @@
+软件列举
+质控：fastqc ,multiqc , trimmomatic, cutadapt, trim-galore
+比对：star , hisat2 , tophat , bowtie2 , bwa , subread
+计数：htseq , bedtools, salmon, featurecount
+
+
+
+
 #1.SRA文件转换成fastq文件
 #我们从NCBI等数据库下载的原始数据很多为SRA格式，需要转换成fastq文件。常用工具为：NCBI SRA Toolkit
 fastq-dump --gzip --split-3 -O outputdir -A file1.sra
@@ -10,13 +18,17 @@ done
 #--split-3：如果是双端测序数据，则输出两个文件，如果不是则只输出一个文件
 
 #2.fastqc
+fastqc -o <output dir> <seqfile1,seqfile2..>
+fastqc *.gz
 fastqc -q -t 4 -o ./fastqc_result/ *.fastq.gz &
  
 #Adapter content，接头含量：在此处可查看数据中使用接头信息
 #具体接头查询地点：github-fastqc 或者：Download common Illumina adapters
 
+multiqc可以对几个fastqc报告文件进行总结并汇总到一个报告文件中，以更直观到防止展示。
+multiqc <analysis directory> 
 
-#3.根据FastQC质控报告，利用Trimmomatic软件处理数据。trimmomatic，是java软件，所以直接Google找到其官网，然后下载二进制版本解压即可使用！
+#3.1根据FastQC质控报告，利用Trimmomatic软件处理数据。trimmomatic，是java软件，所以直接Google找到其官网，然后下载二进制版本解压即可使用！
 #这个软件设计就是为了illumina的测序数据的，因为它自带的adaptor文件有限！一般只去除TruSeq Universal Adapter 这个接头，运行的时候，不报错才算是成功的！
 #Paired End:
 java -jar trimmomatic-0.35.jar PE -phred33 input_forward.fq.gz input_reverse.fq.gz 
@@ -26,6 +38,20 @@ ILLUMINACLIP:TruSeq3-PE.fa:2:30:10
 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 
 ## 所以只需要把参数放对位置即可！
 
+#3.2trim_galore数据过滤
+
+trim_galore -output_dir clean --paired --length 75 --quality 25 --stringency 5 seq_1.fasq.gz seq_2.fastq.gz
+
+trim_galore -q 25 --stringency 5 --dont_gzip --fastqc --retain_unpaired -r1 31 -r2 31 --length 30 -o ./ --paired   
+--phred33 -a adaptor1 -a2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT *_R1.fastq.gz *_R2.fastq.gz
+其中adaptor1 为3'端引物，通常不同组织样有自己对应的引物，公司提供的word里面都附带的有，此处执行命令是需要在该序列前添加A，不然程序会提醒adaptor不完整 
+a2后面的其实是5'端引物的反向互补序列
+
+trim_galore -q 20 --phred33 --stringency 3 --length 20 -e 0.1 \
+--paired *_1.fq.gz *_2.fq.gz  \
+--gzip -o /Users/yqWang/Local/wangyiqi/ZL1_VS_ZL3/ZL1_2/ZL1_2clean_data
+
+观察到总read数减小和总体read的质量变高，小部分adapter也被去除。更具体过滤和trim_galore的数据处理情况可以在seq_trimming_report.txt中查看。
 
 #在 UCSC 下载 hg19 参考基因组；
 #从 gencode 数据库下载基因注释文件，并且用 IGV 去查看感兴趣的基因的结构，比如TP53,KRAS,EGFR 等等。
@@ -33,6 +59,35 @@ LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
 #下载 ENSEMBL，NCBI 的 gtf，也导入 IGV 看看，截图基因结构
 
 #4.把整理好的数据和参考基因组序列进行比对，寻找每个reads的最佳匹配位置。可以使用HISAT2，tophat2，STAR等软件。
+
+hisat2-build –p 4 genome.fa genome
+extract_exons.py Homo_sapiens.GRCh38.83.chr.gtf > genome.exon
+extract_splice_sites.py Homo_sapiens.GRCh38.83.chr.gtf > genome.ss
+extract_snps.py snp142Common.txt > genome.snp
+hisat2-build -p4 genome.fa --snp genome.snp --ss genome.ss --exon genome.exon genome_snp_tran
+hisat2 -p16-x ./grch38_tran/genome_tran -1 SRR534293_1.fastq -2 SRR534293_2.fastq –S SRR534293.sam
+hisat2  -p 6    -x <dir of index of genome>  -1  seq_val_1.fq.gz   -2  seq_val_2.fq.gz  -S  tem.hisat2.sam
+hisat2 -t -x /Users/yqWang/Local/wangyiqi/reference/index/hg38/genome -1 ZL1_2_1_val_1.fq.gz -2 ZL1_2_2_val_2.fq.gz -S ZL1_2.sam
+
+tophat2
+
+tophat2 -p 2 -G /data/plant_genome/Lj3.0/Lj3.0_gene.gtf -o tophat_output /data/plant_genome/Lj3.0/Lj3.0_genome root20d_R1.fa root20d_R2.fa
+
+
+samtools
+samtools view -S seq.sam -b > seq.bam  #文件格式转换
+samtools sort seq.bam -0 seq_sorted.bam  ##将bam文件排序
+samtools index seq_sorted.bam  #对排序后对bam文件索引生成bai格式文件，用于快速随机处理。
+samtools flagstate seq_sorted.bam > seq_sorted.flagstate
+
+for i in `seq 1 1`
+do
+    samtools view -S ZL1_2.sam -b > ZL1_2.bam
+    samtools sort ZL1_1.bam -o ZL1_1_sorted.bam
+    samtools index ZL1_1_sorted.bam
+done
+
+
 
 #5.htseq-count 是一款用于reads计数的软件，他能对位于基因组上的一些单位的reads数进行统计，这里所说的单位主要是指染色体上的一组位置区间（我们常见的就是gene exon）。基本用法：
 #htseq-count [options] <alignment_file> <gff_file>
@@ -42,3 +97,13 @@ LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
 #-s yes/no/reverse, 这也是巨坑的参数，默认是yes，一般人拿到的数据都是no，所以千万要注意！！！
 #-t 选择gff/gtf文件的第3列，一般是exon，也可以是gene，transcript ，这个很少调整的。
 #-i 这个需要修改，不然默认是ensembl的基因ID，一般人看不懂，可以改为gene_name，前提是你的gff文件里面有gene_name这个属性。
+
+
+#计算RNA-seq测序reads对在基因组中对比对深度。
+#计数工具：feature counts
+feature counts -T 6 -t exon -g gene_id -a <gencode.gtf> -o seq_featurecount.txt <seq.bam>
+-g # 注释文件中提取对Meta-feature 默认是gene_id
+-t # 提取注释文件中的Meta-feature 默认是 exon
+-p #参数是针对paired-end 数据
+-a #输入GTF/GFF 注释文件
+-o #输出文件
