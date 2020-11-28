@@ -1,0 +1,32 @@
+1. Trinity
+Trinity是由 the Broad Institute 开发的转录组de novo组装软件，由三个独立的软件模块组成：Inchworm,Chrysalis和Butterfly。三个软件依次来处理大规模的RNA-seq的reads数据。Trinity的简要工作流程为：
+
+Inchworm: 将RNA-seq的原始reads数据组装成Unique序列；
+Chrysalis: 将上一步生成的contigs聚类，然后对每个类构建Bruijn图；
+Butterfly: 处理这些Bruijn图，依据图中reads和成对的reads来寻找路径，从而得到具有可变剪接的全长转录子，同时将旁系同源基因的转录子分开。
+目前最常用 Illumina RNA-Seq data de novo组装软件。案例：
+
+http://bmcgenomics.biomedcentral.com/articles/10.1186/1471-2164-15-554
+https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-016-2633-2
+http://www.nature.com/articles/srep08259
+http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0128659
+
+Trinity --seqType fq --left reads_1.fq --right reads_2.fq --CPU 6 --max_memory 20G 
+Trinity --seqType fq --max_memory 100G --CPU 50 --min_kmer_cov 3 
+--left FCHK2FVCCXY_L3_WHDAVllgEAAARAAPEI-96_1.fq.gz,FCHK2FVCCXY_L3_WHDAVllgEAABRAAPEI-97_1.fq.gz,FCHK2FVCCXY_L3_WHDAVllgEAABRAAPEI-97_1.fq.gz  
+--right FCHK2FVCCXY_L3_WHDAVllgEAAARAAPEI-96_2.fq.gz,FCHK2FVCCXY_L3_WHDAVllgEAABRAAPEI-97_2.fq.gz,FCHK2FVCCXY_L3_WHDAVllgEAACRAAPEI-98_2.fq.gz 
+--output gongtong_trinity_out  --group_pairs_distance 230 --no_version_check  --verbose 
+--min_contig_length 250 --min_glue 3 --no_distributed_trinity_exec 
+~/bio/trinityrnaseq-Trinity-v2.4.0/trinity-plugins/parafly/bin/ParaFly -c recursive_trinity.cmds -CPU 50 -v
+
+Trinity分步运行
+当数据量比较大的时候，trinity运行的时间会很长，同时，内存不够等情况出现的时候有可能程序运行崩溃。最好是分步运行。下一步会接着前一步进行下去。
+
+Stage 1: generate the kmer-catalog and run Inchworm: –no_run_chrysalis
+
+Stage 2: Chrysalis clustering of inchworm contigs and mapping reads: –no_run_quantifygraph
+
+Stage 3: Chrysalis deBruijn graph construction: –no_run_butterfly
+
+Stage 4: Run butterfly, generate final Trinity.fasta file. (exclude –no_ options)
+ 
