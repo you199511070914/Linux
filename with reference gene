@@ -3,13 +3,29 @@
 比对：star , hisat2 , tophat , bowtie2 , bwa , subread
 计数：htseq , bedtools, salmon, featurecount
 
+fastq-dump: 最常用的，讲SRA数据转换为fastq格；
+prefetch: 下载sra数据
+sam-dump: 将 SRA 转换为sam格式，如果原始数据是sam或bam，就需要使用这个工具
+ascp和prefetch 
 #1 下载SRA文件
+prefetch SRR1972917
+prefetch下载的数据在home目录下的ncbi目录里。
+
+~/ncbi/public/
+
+
+wget http://download.asperasoft.com/download/sw/connect/3.7.2/aspera-connect-3.7.2.141527-linux-64.sh
+sh aspera-connect-3.7.2.141527-linux-64.sh
+
+ascp -k 1 -l 100M -i ~/asperaweb_id_dsa.openssh -T anonftp@ftp.ncbi.nlm.nih.gov:sra/sra-instant/reads/ByStudy/sra/SRP/SRP040/SRP040251/SRR1197490/SRR1197490.sra .
 
 
 #2 SRA文件转换成fastq文件
 
 #我们从NCBI等数据库下载的原始数据很多为SRA格式，需要转换成fastq文件。常用工具为：NCBI SRA Toolkit
 fastq-dump --gzip --split-3 -O outputdir -A file1.sra
+fastq-dump --gzip --split-3 SRR1972917.sra
+fastq-dump --split-files SRR1972917
 
 for I in seq 56 62
 do
