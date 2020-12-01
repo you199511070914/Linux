@@ -43,7 +43,7 @@ ENA数据库下载：这里和上面不同，数据的存放地址是fasp.sra.eb
 注意：era-fasp@fasp.sra.ebi.ac.uk后面是:号，不是路径/！
 一般来说，EBI的sra文件前面的地址也都是一样的vol1/fastq/...，那么写脚本批量下载也就不难了！
 
-ascp -QT -l 300m -P33001 -i ~/.aspera/connect/etc/asperaweb_id_dsa.openssh era-fasp@fasp.sra.ebi.ac.uk:/vol1/fastq/SRR949/SRR949627/SRR949627_1.fastq.gz 
+ascp -QT -l 300m -P 33001 -i ~/.aspera/connect/etc/asperaweb_id_dsa.openssh era-fasp@fasp.sra.ebi.ac.uk:/vol1/fastq/SRR949/SRR949627/SRR949627_1.fastq.gz 
 ~/biostar/aspera/
 
 wget http://download.asperasoft.com/download/sw/connect/3.7.2/aspera-connect-3.7.2.141527-linux-64.sh
