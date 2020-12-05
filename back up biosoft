@@ -7,11 +7,13 @@ trycycler --help
 whereis Trycycler
 
 #install circos
-
+wget http://circos.ca/distribution/circos-0.69-8.tgz
+tar xvf circos-0.68.tar
+#安装必备模块
 perl -MCPAN -e shell
 install Config::General
 install GD
 install GD::Polyline
-
+#sudo apt-get一步安装
 sudo apt-get install circos
 sudo apt-get install -f #作用：（-f ：fix broken）修复依赖包。假如用户的系统上有某个package不满足依赖条件，这个命令就会自动修复，安装程序包所依赖的包。注意紧跟安装前一条命令后面 .
