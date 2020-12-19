@@ -34,6 +34,62 @@ thickness        = 20p
 fill             = yes
 stroke_color     = dgrey
 stroke_thickness = 2p
+
+show_label = yes
+
+# 设定label的字体
+label_font = default
+
+# 设定 label 的位置
+label_radius = dims(ideogram,radius) + 0.05r
+
+# 设定 label 的字体大小
+label_size = 40
+
+# 设定 label 的字体方向,yes是易于浏览的方向.
+label_parallel = yes
+
+label_format   = eval(sprintf("%s",var(chr))) # 格式
+<plots>
+ 
+<plot>
+type      = line
+thickness = 2
+max_gap = 1u
+file = genes_num.txt
+color   = redv
+r0      = 0.51r
+r1      = 0.60r
+</plot>
+ 
+<plot>
+type    = heatmap
+file    = genes_num.txt
+color   = spectral-5-div
+r1      = 0.70r
+r0      = 0.61r
+</plot>
+ 
+<plot>
+type = scatter
+fill_color       = grey
+stroke_color     = black
+glyph            = circle
+glyph_size       = 10
+file = genes_num.txt
+r1   = 0.80r
+r0   = 0.71r
+</plot>
+ 
+<plot>
+type = histogram
+file = genes_num.txt
+r1   = 0.89r
+r0   = 0.81r
+</plot>
+ 
+</plots>
+
 </ideogram>
  
 <image>
