@@ -7,12 +7,15 @@ fastq-dump: 最常用的，讲SRA数据转换为fastq格；
 prefetch: 下载sra数据
 sam-dump: 将 SRA 转换为sam格式，如果原始数据是sam或bam，就需要使用这个工具
 ascp和prefetch 
-#1 下载SRA文件
+
+1： 下载SRA文件
+
+1.1：prefetch下载数据
 prefetch SRR1972917
 prefetch下载的数据在home目录下的ncbi目录里。
-
 ~/ncbi/public/
 
+1.2：aspera下载数据
 wget http://download.asperasoft.com/download/sw/connect/3.7.4/aspera-connect-3.7.4.147727-linux-64.tar.gz
 tar zxvf aspera-connect-3.7.4.147727-linux-64.tar.gz
 bash aspera-connect-3.7.4.147727-linux-64.sh
@@ -51,7 +54,7 @@ sh aspera-connect-3.7.2.141527-linux-64.sh
 ascp -k 1 -l 100M -i ~/asperaweb_id_dsa.openssh -T anonftp@ftp.ncbi.nlm.nih.gov:sra/sra-instant/reads/ByStudy/sra/SRP/SRP040/SRP040251/SRR1197490/SRR1197490.sra .
 
 
-#2 SRA文件转换成fastq文件
+2： SRA文件转换成fastq文件
 
 #我们从NCBI等数据库下载的原始数据很多为SRA格式，需要转换成fastq文件。常用工具为：NCBI SRA Toolkit
 fastq-dump --gzip --split-3 -O outputdir -A file1.sra
@@ -65,7 +68,7 @@ done
 
 #--split-3：如果是双端测序数据，则输出两个文件，如果不是则只输出一个文件
 
-#3.1 fastq文件进行质检
+3.1： fastqc对fastq文件进行质检
 fastqc
 fastqc -o <output dir> <seqfile1,seqfile2..>
 fastqc *.gz
@@ -74,10 +77,10 @@ fastqc -q -t 4 -o ./fastqc_result/ *.fastq.gz &
 #Adapter content，接头含量：在此处可查看数据中使用接头信息
 #具体接头查询地点：github-fastqc 或者：Download common Illumina adapters
 
-#3.2 multiqc可以对几个fastqc报告文件进行总结并汇总到一个报告文件中，以更直观到防止展示。
+3.2： multiqc可以对几个fastqc报告文件进行总结并汇总到一个报告文件中，以更直观到防止展示。
 multiqc <analysis directory> 
 
-#4.1 根据FastQC质控报告，利用Trimmomatic软件处理数据。trimmomatic，是java软件，所以直接Google找到其官网，然后下载二进制版本解压即可使用！
+4.1： 根据FastQC质控报告，利用Trimmomatic软件处理数据。trimmomatic，是java软件，所以直接Google找到其官网，然后下载二进制版本解压即可使用！
 #这个软件设计就是为了illumina的测序数据的，因为它自带的adaptor文件有限！一般只去除TruSeq Universal Adapter 这个接头，运行的时候，不报错才算是成功的！
 #Paired End:
 java -jar trimmomatic-0.35.jar PE -phred33 input_forward.fq.gz input_reverse.fq.gz 
@@ -87,7 +90,7 @@ ILLUMINACLIP:TruSeq3-PE.fa:2:30:10
 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 
 ## 所以只需要把参数放对位置即可！
 
-#4.2 trim_galore数据过滤
+4.2： trim_galore数据过滤
 
 trim_galore -output_dir clean --paired --length 75 --quality 25 --stringency 5 seq_1.fasq.gz seq_2.fastq.gz
 
@@ -106,25 +109,25 @@ trim_galore -q 20 --phred33 --stringency 3 --length 20 -e 0.1 \
 #截图几个基因的 IGV 可视化结构
 #下载 ENSEMBL，NCBI 的 gtf，也导入 IGV 看看，截图基因结构
 
-#5 把整理好的数据和参考基因组序列进行比对，寻找每个reads的最佳匹配位置。可以使用HISAT2，tophat2，STAR等软件。
+5： 把整理好的数据和参考基因组序列进行比对，寻找每个reads的最佳匹配位置。可以使用HISAT2，tophat2，STAR等软件。
 
-#5.1 hisat2
-#hisat2建立索引文件
+5.1： hisat2
+5.1.1：hisat2建立索引文件
 hisat2-build –p 4 genome.fa genome
 extract_exons.py Homo_sapiens.GRCh38.83.chr.gtf > genome.exon
 extract_splice_sites.py Homo_sapiens.GRCh38.83.chr.gtf > genome.ss
 extract_snps.py snp142Common.txt > genome.snp
 hisat2-build -p 4 genome.fa --snp genome.snp --ss genome.ss --exon genome.exon genome_snp_tran
-#5.2进行比对（单端比对以及双端比对）
+5.1.2：进行比对（单端比对以及双端比对）
 hisat2 -p 16 -x ./grch38_tran/genome_tran -1 SRR534293_1.fastq -2 SRR534293_2.fastq –S SRR534293.sam
 hisat2 -p 6 -x <dir of index of genome> -1 seq_val_1.fq.gz -2 seq_val_2.fq.gz -S tem.hisat2.sam
 hisat2 -t -x /Users/yqWang/Local/wangyiqi/reference/index/hg38/genome -1 ZL1_2_1_val_1.fq.gz -2 ZL1_2_2_val_2.fq.gz -S ZL1_2.sam
 
-#5.2 tophat2
+5.2： tophat2
 
 tophat2 -p 2 -G /data/plant_genome/Lj3.0/Lj3.0_gene.gtf -o tophat_output /data/plant_genome/Lj3.0/Lj3.0_genome root20d_R1.fa root20d_R2.fa
 
-#6 samtools
+6： samtools
 samtools view -S seq.sam -b > seq.bam  #文件格式转换
 samtools sort seq.bam -0 seq_sorted.bam  ##将bam文件排序
 samtools index seq_sorted.bam  #对排序后对bam文件索引生成bai格式文件，用于快速随机处理。
@@ -139,8 +142,8 @@ done
 
 
 
-#7 计数
-#7.1 htseq-count 是一款用于reads计数的软件，他能对位于基因组上的一些单位的reads数进行统计，这里所说的单位主要是指染色体上的一组位置区间（我们常见的就是gene exon）。
+7：计数
+7.1： htseq-count 是一款用于reads计数的软件，他能对位于基因组上的一些单位的reads数进行统计，这里所说的单位主要是指染色体上的一组位置区间（我们常见的就是gene exon）。
 
 #htseq-count [options] <alignment_file> <gff_file>
 #参考gtf文件可以是gencode或者是ensembl数据库的，但是尤其要注释chr的问题，而且版本问题，gtf/gff格式无所谓。比对后的文件一定要进行sort，推荐一定要sort -n，根据reads的name来sort
@@ -151,7 +154,7 @@ done
 #-i 这个需要修改，不然默认是ensembl的基因ID，一般人看不懂，可以改为gene_name，前提是你的gff文件里面有gene_name这个属性。
 
 
-#7.2 feature counts计算RNA-seq测序reads对在基因组中对比对深度。
+7.2： feature counts计算RNA-seq测序reads对在基因组中对比对深度。
 feature counts -T 6 -t exon -g gene_id -a <gencode.gtf> -o seq_featurecount.txt <seq.bam>
 # -g注释文件中提取对Meta-feature 默认是gene_id
 # -t提取注释文件中的Meta-feature 默认是 exon
