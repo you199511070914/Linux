@@ -7,12 +7,18 @@ pip3 install git+https://github.com/rrwick/Trycycler.git
 trycycler --help
 whereis Trycycler
 
-2.
+2.linux绘制circos图
 #install circos
-wget http://circos.ca/distribution/circos-0.69-8.tgz
-tar xvf circos-0.68.tar
+wget http://circos.ca/distribution/circos-0.69-9.tgz
+tar xzf circos-0.69-9.tgz
+
+cd circos-0.69/example/   #测试circos是否下载成功 
+../bin/circos -conf etc/circos.conf
+
+circos -module  #检测circos模块是否安装成功
 #安装必备模块
 perl -MCPAN -e shell
+
 install Config::General
 install GD
 install GD::Polyline
@@ -24,36 +30,75 @@ circos -modules #检查模块是否正确安装，这时，显示ok的表明已�
 
 #运行circos命令：
 circos -conf circos.conf
+/home/ymc/Downloads/circos-0.69-9/bin/circos -conf /home/ymc/Downloads/circos-0.69-9/bin/plots_circos.conf
 #其中circos.conf文件为设置好的文件，可以放在任意位置，但其中包含的信息要格外注意：
 #例如，本机使用sudo apt-get install circos安装circos之后，其配置信息包含在/usr/share/circos/etc/目录下，因此circos.conf的配置信息为如下基本格式：
+
+1：circos.conf 配置信息（包含全部配置信息）：
+
 karyotype = karyotype.tair10.txt
+
+1.1：ideogram.conf 配置信息：
+
 <ideogram>
 <spacing>
-default = 0.005r
+default = 0.005r   # 设置圈图中染色体之间的空隙大小，以下设置为每个空隙大小为周长的 0.5%
 </spacing>
-radius           = 0.90r
-thickness        = 20p
-fill             = yes
-stroke_color     = dgrey
+radius           = 0.90r   # 设定 ideograms 的位置，以下设定 ideograms 在图离圆心的 90% 处
+thickness        = 20p     # 设定 ideograms 的厚度，可以使用 r（比例关系） 或 p（像素）作为单位
+fill             = yes     # 设定 ideograms 是否填充颜色。填充的颜色取决于 karyotype 指定的文件的最后一列
+stroke_color     = dgrey   # 设定 ideograms 轮廓的颜色及其厚度。如果没有该参数或设定其厚度为0，则表示没有轮廓
 stroke_thickness = 2p
+show_label = yes           # 设定是否显示label label对应着karyotype文件的第4列 如果其值为yes 则必须要有label_radius参数来设定label的位置 否则会报错并不能生成结果
+label_font = default       # 设定label的字体
+label_radius = dims(ideogram,radius) + 0.05r  # 设定 label 的位置   #label_radius = 1r+90p
+label_size = 40            # 设定 label 的字体大小
+label_parallel = yes       # 设定 label 的字体方向,yes是易于浏览的方向.
+label_format   = eval(sprintf("%s",var(chr)))    # 格式
+</ideogram>
 
+1.2：ticks.conf 配置信息：
+
+# 是否显示 ticks
+show_ticks = yes
+# 是否显示 ticks 的 lables
+show_tick_labels = yes
+## 设定 ticks
+<ticks>
+## ticks 的设置
+# 设定 ticks 的位置
+radius = 1r
+# 设定 ticks 的颜色
+color = black
+# 设定 ticks 的厚度
+thickness = 2p
+# 设定 ticks' label 的值的计算。将该刻度对应位置的值 * multiplier 得到能展示到圈图上的 label 值。
+multiplier = 1e-6
+# label 值的格式化方法。%d 表示结果为整数；%f 结果为浮点数； %.1f 结果为小数点后保留1位； %.2f 结果为小数点后保留2位。
+format = %d
+## 以下设置了 2 个 ticks，前者是小刻度，后者是大刻度。
+<tick>
+# 设置每个刻度代表的长度。若其单位为 u，则必须要设置 chromosomes_units 参数。比如设置 chromosomes_units = 1000000，则如下 5u 表示每个刻度代表 5M 长度的基因组序列。
+spacing = 5u
+# 设置 tick 的长度
+size = 10p
+</tick>
+<tick>
+spacing = 25u
+size = 15p
+# 以下用于设置展示 ticks' label。
 show_label = yes
+# 设置 ticks' label 的字体大小
+label_size = 20p
+# 设置 ticks' label 离 ticks 的距离
+label_offset = 10p
+format = %d
+</tick>
+</ticks>
 
-# 设定label的字体
-label_font = default
 
-# 设定 label 的位置
-label_radius = dims(ideogram,radius) + 0.05r
-
-# 设定 label 的字体大小
-label_size = 40
-
-# 设定 label 的字体方向,yes是易于浏览的方向.
-label_parallel = yes
-
-label_format   = eval(sprintf("%s",var(chr))) # 格式
 <plots>
- 
+
 <plot>
 type      = line
 thickness = 2
@@ -62,8 +107,7 @@ file = genes_num.txt
 color   = redv
 r0      = 0.51r
 r1      = 0.60r
-</plot>
- 
+</plot> 
 <plot>
 type    = heatmap
 file    = genes_num.txt
@@ -71,7 +115,6 @@ color   = spectral-5-div
 r1      = 0.70r
 r0      = 0.61r
 </plot>
- 
 <plot>
 type = scatter
 fill_color       = grey
@@ -82,7 +125,6 @@ file = genes_num.txt
 r1   = 0.80r
 r0   = 0.71r
 </plot>
- 
 <plot>
 type = histogram
 file = genes_num.txt
@@ -91,15 +133,13 @@ r0   = 0.81r
 </plot>
  
 </plots>
-
-</ideogram>
  
 <image>
-<<include /usr/share/circos/etc/image.conf>>
+<<include /usr/share/circos/etc/image.conf>>    #设置生成图片参数
 </image>
  
-<<include /usr/share/circos/etc/colors_fonts_patterns.conf>>
-<<include /usr/share/circos/etc/housekeeping.conf>>
+<<include /usr/share/circos/etc/colors_fonts_patterns.conf>>   #设置颜色、字体、填充模式的配置信息
+<<include /usr/share/circos/etc/housekeeping.conf>>      #系统与Debug参数
 
 #其中karyotype.tair10.txt与circos.conf为同一目录下的文件，其基本格式为：
 chr - chr1 chr1 0 30427617 black
