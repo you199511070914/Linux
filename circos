@@ -1,3 +1,6 @@
+circos执行文件 ../bin/circos 在/home/ymc/Downloads/circos-0.69-9/bin下。
+因此执行命令为：../bin/circos -conf circos.conf
+
 linux绘制circos图
 #install circos
 wget http://circos.ca/distribution/circos-0.69-9.tgz
