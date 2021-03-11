@@ -82,7 +82,10 @@ fastqc -q -t 4 -o ./fastqc_result/ *.fastq.gz &
 3.2： multiqc可以对几个fastqc报告文件进行总结并汇总到一个报告文件中，以更直观到防止展示。
 multiqc <analysis directory> 
 
-4.1： 根据FastQC质控报告，利用Trimmomatic软件处理数据。trimmomatic，是java软件，所以直接Google找到其官网，然后下载二进制版本解压即可使用！
+4：数据过滤
+
+4.1：Trimmomatic
+根据FastQC质控报告，利用Trimmomatic软件处理数据。trimmomatic，是java软件，所以直接Google找到其官网，然后下载二进制版本解压即可使用！
 #这个软件设计就是为了illumina的测序数据的，因为它自带的adaptor文件有限！一般只去除TruSeq Universal Adapter 这个接头，运行的时候，不报错才算是成功的！
 #Paired End:
 java -jar trimmomatic-0.35.jar PE -phred33 input_forward.fq.gz input_reverse.fq.gz 
@@ -92,7 +95,7 @@ ILLUMINACLIP:TruSeq3-PE.fa:2:30:10
 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36 
 ## 所以只需要把参数放对位置即可！
 
-4.2： trim_galore数据过滤
+4.2： trim_galore
 
 trim_galore -output_dir clean --paired --length 75 --quality 25 --stringency 5 seq_1.fasq.gz seq_2.fastq.gz
 
@@ -104,6 +107,9 @@ trim_galore -q 20 --phred33 --stringency 3 --length 20 -e 0.1 \
 --paired *_1.fq.gz *_2.fq.gz  \
 --gzip -o /Users/yqWang/Local/wangyiqi/ZL1_VS_ZL3/ZL1_2/ZL1_2clean_data
 
+trim_galore -q 25 --phred33 --stringency 3 --length 100 --paired PRNA202178TY_C_12_R1.fastq.gz PRNA202178TY_C_12_R2.fastq.gz --gzip -o /data/pub/youmengcheng/ymc/cleandata/
+trim_galore --phred33 --quality 25 --length 100 --stringency 5 --paired --max_n 3 out.PRNA202178TY_C_12_R1.fastq out.PRNA202178TY_C_12_R2.fastq
+
 观察到总read数减小和总体read的质量变高，小部分adapter也被去除。更具体过滤和trim_galore的数据处理情况可以在seq_trimming_report.txt中查看。
 
 #在 UCSC 下载 hg19 参考基因组；
@@ -111,23 +117,105 @@ trim_galore -q 20 --phred33 --stringency 3 --length 20 -e 0.1 \
 #截图几个基因的 IGV 可视化结构
 #下载 ENSEMBL，NCBI 的 gtf，也导入 IGV 看看，截图基因结构
 
+4.3：fastp
+
+conda install fastp
+
+单端：
+fastp -i in.fq -o out.fq
+
+双端：
+fastp -l 100 -i in_1.fq -o out_1.fq -I in_2.fq -O out_2.fq
+
+fastp -f 10 -F 10 --detect_adapter_for_pe -x -i R1.fq.gz -I R2.fq.gz -o R1.out.fq.gz -O R2.out.fq.gz
+
+fastp -f 10 -F 10 --adapter_sequence AGATCGGAAGAGCACACGTCTGAAC --adapter_sequence_r2 AGATCGGAAGAGCGTCGTGTAGGGA -x \
+-i PRNA202178TY_S11_R1.fastq -I PRNA202178TY_S11_R2.fastq \
+-o S_11_R1.fastq -O S_11_R2.fastq
+
 5： 把整理好的数据和参考基因组序列进行比对，寻找每个reads的最佳匹配位置。可以使用HISAT2，tophat2，STAR等软件。
 
 5.1： hisat2
+
 5.1.1：hisat2建立索引文件
 hisat2-build –p 4 genome.fa genome
 extract_exons.py Homo_sapiens.GRCh38.83.chr.gtf > genome.exon
 extract_splice_sites.py Homo_sapiens.GRCh38.83.chr.gtf > genome.ss
 extract_snps.py snp142Common.txt > genome.snp
 hisat2-build -p 4 genome.fa --snp genome.snp --ss genome.ss --exon genome.exon genome_snp_tran
+
 5.1.2：进行比对（单端比对以及双端比对）
 hisat2 -p 16 -x ./grch38_tran/genome_tran -1 SRR534293_1.fastq -2 SRR534293_2.fastq –S SRR534293.sam
 hisat2 -p 6 -x <dir of index of genome> -1 seq_val_1.fq.gz -2 seq_val_2.fq.gz -S tem.hisat2.sam
 hisat2 -t -x /Users/yqWang/Local/wangyiqi/reference/index/hg38/genome -1 ZL1_2_1_val_1.fq.gz -2 ZL1_2_2_val_2.fq.gz -S ZL1_2.sam
 
-5.2： tophat2
+hisat2 -p 10 -x /data/pub/youmengcheng/ymc/index/hisat2-index/cpap_ref -1 /data/pub/youmengcheng/ymc/cleandata/PRNA202178TY_S11_R1.fastq.gz 
+-2 /data/pub/youmengcheng/ymc/cleandata/PRNA202178TY_S11_R2.fastq.gz 
+-S /data/pub/youmengcheng/ymc/cpap/PRNA202178TY_S11.sam
+
+5.2:STAR
+5.2.1:建立索引
+STAR --runThreadN 20 --runMode genomeGenerate \
+--genomeDir /data/pub/youmengcheng/ymc/index/star-index/ \   #构建好的索引放在这个位置
+--genomeFastaFiles /data/pub/youmengcheng/ymc/reference/GCF_000175795.2_ASM17579v2_genomic.fna \
+--sjdbGTFfile /data/pub/youmengcheng/ymc/reference/GCF_000175795.2_ASM17579v2_genomic.gtf \
+--sjdbOverhang 284   #我的测序数据长短不一，最长的是285bp
+
+--runThreadN 是指构建是使用的线程数，在没有其他数据在跑的情况下，可以满线程跑
+--runMode genomeGenerate 让STAR执行基因组索引的生成工作
+--genomeDir 构建好的参考基因组存放的位置，最好是单独建立的一个文件夹
+--genomeFastaFiles 参考基因组序列文件
+--sjdbGTFfile 基因注释文件
+
+STAR 
+--runThreadN 20 \
+--genomeDir /home/lyc/workspace4.21.20/data/ref \
+--readFilesCommand gunzip -c \
+--readFilesIn /home/lyc/workspace4.21.20/data/cleandata/N052611_Alb_1.fastq.gz /home/lyc/workspace4.21.20/data/cleandata/N052611_Alb_2.fastq.gz \
+--outSAMtype BAM SortedByCoordinate \
+--outFileNamePrefix N052611_Alb \
+
+STAR --runThreadN 20 --readFilesIn /home/fanyc/RNA-seq/raw_data/SRR993723.sra_1.fastq /home/fanyc/RNA-seq/raw_data/SRR993723.sra_2.fastq 
+--quantMode TranscriptomeSAM --outSAMtype BAM SortedByCoordinate --outFileNamePrefix /home/fanyc/RNA-seq/STAR/23 
+--outFilterType BySJout --outFilterMultimapNmax 20 --alignSJoverhangMin 8 
+--alignSJDBoverhangMin 1 --outFilterMismatchNmax 999 --outFilterMismatchNoverLmax 0.04 
+--alignIntronMin 20 --alignIntronMax 1000000 --alignMatesGapMax 1000000 --chimSegmentMin 20
+
+STAR --genomeDir /data/pub/youmengcheng/ymc/index/star-index/ --runThreadN 10 
+--readFilesIn PRNA202178TY_S_2_R1.fastq.gz PRNA202178TY_S_2_R2.fastq.gz 
+--readFilesCommand zcat --outFileNamePrefix PRNA202178TY_S_2 --outSAMtype BAM SortedByCoordinate --outBAMsortingThreadN 8
+
+–runThreadN 运行的线程数，根据自己的服务器合理选择
+–genomeDir 构建的参考基因组位置
+–readFilesCommand 对于gz压缩的文件，我们可以在后面添加 gunzip -c
+–readFilesIn 输入文件的位置，对于双末端测序文件，用空格分隔开就行了
+–outSAMtype 默认输出的是sam文件，我们这里的BAM SortedByCoordinate是让他输出为ban文件，并排序
+–outFileNamePrefix 表示的是输出文件的位置和前缀
+生成的文件：
+Chimeric.out.junction  融合转录本
+
+Aligned.sortedByCoord.out.bam  比对输出
+
+Aligned.toTranscriptome.out.bam 转录本比对输出
+
+SJ.out.tab 可变剪切结果输出
+
+Aligned.out.sam或者Aligned.out.bam
+它指的就是我们的比对结果
+Log.progress.out
+它是每分钟记录一次的对比情况
+Log.out
+它记录了STAR程序在运行中的各种情况，当我们的结果出现异常时，我们可以查看具体的运行情况，来查找错误
+Log.final.out
+它包含的是对比完以后的对比统计信息
+SJ.out.tab
+它包含了剪切的信息
+
+5.3： tophat2
 
 tophat2 -p 2 -G /data/plant_genome/Lj3.0/Lj3.0_gene.gtf -o tophat_output /data/plant_genome/Lj3.0/Lj3.0_genome root20d_R1.fa root20d_R2.fa
+
+
 
 6： samtools
 samtools view -S seq.sam -b > seq.bam  #文件格式转换
@@ -142,7 +230,8 @@ do
     samtools index ZL1_1_sorted.bam
 done
 
-
+samtools sort C_12.bam C_12_sorted
+samtools index PRNA202178TY_S_2_val_sorted.bam
 
 7：计数
 7.1： htseq-count 是一款用于reads计数的软件，他能对位于基因组上的一些单位的reads数进行统计，这里所说的单位主要是指染色体上的一组位置区间（我们常见的就是gene exon）。
@@ -155,6 +244,8 @@ done
 #-t 选择gff/gtf文件的第3列，一般是exon，也可以是gene，transcript ，这个很少调整的。
 #-i 这个需要修改，不然默认是ensembl的基因ID，一般人看不懂，可以改为gene_name，前提是你的gff文件里面有gene_name这个属性。
 
+htseq-count -f bam -r pos /data/pub/youmengcheng/ymc/cpap/PRNA202178TY_S11_val_sorted.bam /data/pub/youmengcheng/ymc/reference/GCF_000175795.2_ASM17579v2_genomic.gtf 
+> PRNA202178TY_S11_val.count.tab
 
 7.2： feature counts计算RNA-seq测序reads对在基因组中对比对深度。
 feature counts -T 6 -t exon -g gene_id -a <gencode.gtf> -o seq_featurecount.txt <seq.bam>
