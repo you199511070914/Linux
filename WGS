@@ -1,0 +1,358 @@
+参考文章：https://zhuanlan.zhihu.com/p/335770966
+
+1.原始数据质控
+2.read比对，排序和去除重复序列
+3.Indel区域重（“重新”的“重”）比对
+4.碱基质量值重校正
+5.变异检测
+6.变异结果质控和过滤
+
+下载并安装以下软件
+BWA, Samtools, GATK4.0, sratoolkit, tabix, fastp, Trimmomatic。
+
+下载E.coli K12的参考基因组序列
+curl -O ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/005/845/GCF_000005845.2_ASM584v2/GCF_000005845.2_ASM584v2_genomic.fna.gz
+用samtools创建索引，生成E.coli_K12_MG1655.fa.fai文件。通过索引，可以方便地获取fasta文件中任意位置的序列。
+bgzip -dc GCF_000005845.2_ASM584v2_genomic.fna.gz > E.coli_K12_MG1655.fa
+samtools faidx E.coli_K12_MG1655.fa
+
+下载E.coli K12的测序数据
+需要用到NCBI的官方工具包sratoolkit，直接下载.fastq格式文件，当然也可以在NCBI上下载好.sra文件并用sratoolkit转换成我们所需的.fastq格式文件。
+这个数据来自Illumina MiSeq测序平台，read长度是300bp，测序类型是双末端测序(Pair-End)。
+方式一:下载.sra格式
+curl -O ftp://ftp-trace.ncbi.nlm.nih.gov/sra/sra-instant/reads/ByRun/sra/SRR/SRR177/SRR1770413/SRR1770413.sra
+fastq-dump --split-files SRR1770413.sra
+
+方式二：直接下载.fastq格式
+fastq-dump --split-files SRR1770413
+
+用bgzip（不推荐gzip）将其压缩为.gz文件，节省空间
+bgzip -f SRR1770413_1.fastq
+bgzip -f SRR1770413_2.fastq
+
+1.原始测序数据质控
+使用fastp对原始数据进行质控
+fastp \
+-i SRR1770413_1.fastq.gz \
+-o SRR1770413_1.clean.fastq.gz \
+-I SRR1770413_2.fastq.gz \
+-O SRR1770413_2.clean.fastq.gz \
+-z 4 \
+-f 5 -t 5 -F 5 -T 5 \
+-5 -W 5 -M 20 \
+-Q \
+-l 50 \
+-c \
+-w 4
+
+使用Trimmomatic对原始数据进行质控
+java -jar /path/trimmomatic-0.39.jar PE \
+-threads 4 \
+-phred33 \
+SRR1770413_1.fastq.gz SRR1770413_2.fastq.gz \
+SRR1770413_1.clean.fastq.gz SRR1770413_1.unpaired.fastq.gz SRR1770413_2.clean.fastq.gz SRR1770413_2.unpaired.fastq.gz \
+ILLUMINACLIP:/path/TruSeq3-PE.fa:2:30:10:8:True \
+SLIDINGWINDOW:5:20 \
+LEADING:5 \
+TRAILING:5 \
+MINLEN:50
+
+time trimm PE -phred33 \
+SRR1770413_1.fastq.gz SRR1770413_2.fastq.gz \
+../cleandata/SRR1770413_1.clean.fastq.gz ../cleandata/SRR1770413_1.unpaired.fastq.gz \
+../cleandata/SRR1770413_2.clean.fastq.gz ../cleandata/SRR1770413_2.unpaired.fastq.gz \
+ILLUMINACLIP:/Users/xtingmao/Applications/Trimmomatic-0.39/adapters/TruSeq3-PE.fa:2:30:10:8:True \
+SLIDINGWINDOW:5:20 LEADING:5 TRAILING:5 MINLEN:50 \
+
+2. read比对，排序和去除重复序列
+为参考序列构建BWA比对所需的FM-index(比对索引)
+bwa index E.coli_K12_MG1655.fa
+完成之后，你会看到类似如下几个以E.coli_K12_MG1655.fasta为前缀的文件：
+E.coli_K12_MG1655.fa.amb
+E.coli_K12_MG1655.fa.ann
+E.coli_K12_MG1655.fa.bwt
+E.coli_K12_MG1655.fa.pac
+E.coli_K12_MG1655.fa.sa
+
+bwa mem -t 4 -R '@RG\tID:foo\tPL:illumina\tSM:E.coli_K12' \
+../input/E.coli/reference/E.coli_K12_MG1655.fa \
+../input/E.coli/cleandata/SRR1770413_1.clean.fastq.gz \
+../input/E.coli/cleandata/SRR1770413_2.clean.fastq.gz \
+| samtools view -Sb - > ../output/E.coli/map/E_coli_K12.bam
+
+# Usage: bwa mem [options] <idxbase> <in1.fq> [in2.fq]
+# -t，线程数，我们在这里使用4个线程
+# -R 接的是Read Group的字符串信息，以@RG开头，制表符(\t)分离各选项
+## 1) ID，这是Read Group的分组ID，一般设置为测序的lane ID
+## 2) PL，指的是所用的测序平台
+## 3) SM，样本ID
+# 用samtools将它转化为BAM文件，为了有效节省磁盘空间，而且BAM会更加方便于后续的分析
+# -b后面的 '-'，它代表是上面管道引流过来的数据
+
+排序
+samtools sort \
+-@ 4 \
+-m 4G \
+-O bam \
+-o ../output/E.coli/sorted/E_coli_K12.sorted.bam \
+../output/E.coli/map/E_coli_K12.bam
+
+标记PCR重复
+gatk MarkDuplicates \
+-I ../output/E.coli/sorted/E_coli_K12.sorted.bam \
+-O ../output/E.coli/marked/E_coli_K12.sorted.markdup.bam \
+-M ../output/E.coli/marked/E_coli_K12.sorted.markdup_metrics.txt
+
+创建比对索引文件
+samtools index ../output/E.coli/marked/E_coli_K12.sorted.markdup.bam
+
+3. Indel区域重（“重新”的“重”）比对
+merge
+有时在进行"局部区域重比对"这一步骤之前还有一个merge的操作，将同个样本的所有比对结果合并成唯一一个大的BAM文件。
+之所以会有这种情况，是因为有些样本测得非常深，其测序结果需要经过多次测序(或者分布在多个不同的测序lane中)才全部获得，
+这个时候我们一般会先分别进行比对并去除重复序列后再使用samtools进行合并。
+merge的例子如下：
+
+samtools merge <out.bam> <in1.bam> [<in2.bam> ... <inN.bam>]
+局部重比对
+
+局部重比对的目的是将BWA比对过程中所发现有潜在序列插入或者序列删除(insertion和deletion，简称Indel)的区域进行重新校正。
+为什么需要进行这个校正呢？其根本原因来自于参考基因组的序列特点和BWA这类比对算法本身，注意这里不是针对BWA，而是针对所有的这类比对算法，包括bowtie等。
+这类在全局搜索最优匹配的算法在存在Indel的区域及其附近的比对情况往往不是很准确。另一个重要的原因是在这些比对算法中，对碱基错配和开gap的容忍度是不同的。
+具体体现在罚分矩阵的偏向上，例如，在read比对时，如果发现碱基错配和开gap都可以的话，它们会更偏向于错配。
+但是这种偏向错配的方式，有时候却还会反过来引起错误的开gap！这就会导致基因组上原本应该是一个长度比较大的Indel的地方，被错误地切割成多个错配和短indel的混合集，这必然会让我们检测到很多错误的变异。
+而且，这种情况还会随着所比对的read长度的增长(比如三代测序的Read，通常都有几十kbp)而变得越加严重。
+
+GATK的局部重比对模块，应用Smith-Waterman算法，可以极其有效地实现对全局比对结果的校正和调整，最大程度低地降低由全局比对算法的不足而带来的错误。
+除此之外，还会对这个区域中的read进行一次局部组装，把它们连接成为长度更大的序列，这样能够更进一步提高局部重比对的准确性。
+
+具体的做法是：
+
+第一步，RealignerTargetCreator ，目的是定位出所有需要进行序列重比对的目标区域。候选的重比对区除了要在样本自身的比对结果中寻找之外，还应该把已知Indel区域也包含进来。
+
+第二步，IndelRealigner，对所有在第一步中找到的目标区域运用算法进行序列重比对，最后得到捋顺了的新结果。
+
+那么既然Indel局部重比对这么好，这么重要，似乎看起来在任何情况下都应该是必须的。然鹅，回答是否定的！但否定是有前提的！
+那就是我们后面的变异检测必须是使用GATK，而且必须使用GATK的HaplotypeCaller模块，仅当这个时候才可以减少这个Indel局部重比对的步骤。
+原因是GATK的HaplotypeCaller中，会对潜在的变异区域进行相同的局部重比对！但是其它的变异检测工具或者GATK的其它模块就没有这么干了！所以切记！
+
+因为在GATK 4.0中没发现IndelRealigner这个功能，所以针对本文中的例子，这一步省略掉了。
+
+4. 碱基质量值重校正(BQSR)
+具体的做法是：
+第一步，BaseRecalibrator，计算出所有需要进行重校正的read和特征值，然后把这些信息输出为一份校准表文件(sample_name.recal_data.table)。
+
+第二步，ApplyBQSR，这一步利用第一步得到的校准表文件(sample_name.recal_data.table)重新调整原来BAM文件中的碱基质量值，并使用这个新的质量值重新输出一份新BAM文件。
+
+❕注意，因为BQSR实际上是为了(尽可能)校正测序过程中的系统性错误，因此，在执行的时候是按照不同的测序lane或者测序文库来进行的，这个时候@RG信息(BWA比对时所设置的)就显得很重要了，
+算法就是通过@RG中的ID来识别各个独立的测序过程。
+
+针对本文中的例子，没有执行BQSR是因为E.coli K12没有那些必须的known变异集(或者有但没找到)，所以无法进行。
+放个human的例子 在这：
+
+gatk BaseRecalibrator \
+-R /path/to/reference/Homo_sapiens_assembly38.fasta \
+-I /path/to/sample_name.sorted.markdup.bam \
+--known-sites /path/to/gatk/bundle/1000G_phase1.indels.hg38.vcf \
+--known-sites /path/to/gatk/bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf \
+--known-sites /path/to/gatk/bundle/dbsnp_146.hg38.vcf \
+-O /path/to/sample_name.sorted.markdup.recal_data.table
+
+gatk ApplyBQSR \
+--bqsr-recal-file /path/to/sample_name.sorted.markdup.recal_data.table \
+-R /path/to/reference/Homo_sapiens_assembly38.fasta \
+-I /path/to/sample_name.sorted.markdup.bam \
+-O /path/to/sample_name.sorted.markdup.BQSR.bam
+
+5. 变异检测
+这是目前所有WGS数据分析流程的一个目标——获得样本准确的变异集合。这里变异检测的内容一般会包括：SNP、Indel，CNV和SV等，这个流程中我们只做其中最主要的两个：SNP和Indel。
+
+我们这里使用GATK HaplotypeCaller模块对样本中的变异进行检测。它会先推断群体的单倍体组合情况，计算各个组合的几率，然后根据这些信息再反推每个样本的基因型组合。
+因此它不但特别适合应用到群体的变异检测中，而且还能够依据群体的信息更好地计算每个个体的变异数据和它们的基因型组合。
+
+一般来说，在实际的WGS流程中对HaplotypeCaller的应用有两种做法，差别只在于要不要在中间生成一个gVCF：
+(1) 直接进行HaplotypeCaller，这适合于单样本，或者那种固定样本数量的情况，也就是执行一次HaplotypeCaller之后就老死不相往来了。
+否则你会碰到仅仅只是增加一个样本就得重新运行这个HaplotypeCaller的坑爹情况(即，N+1难题)，而这个时候算法需要重新去读取所有人的BAM文件，这将会是一个很费时间的痛苦过程；
+(2) 每个样本先各自生成gVCF，然后再进行群体joint-genotype。这其实就是GATK团队为了解决(1)中的N+1难题而设计出来的模式。
+gVCF全称是genome VCF，是每个样本用于变异检测的中间文件，格式类似于VCF，它把joint-genotype过程中所需的所有信息都记录在这里面，文件无论是大小还是数据量都远远小于原来的BAM文件。
+这样一旦新增加样本也不需要再重新去读取所有人的BAM文件了，只需为新样本生成一份gVCF，然后重新执行这个joint-genotype就行了。
+
+推荐选择第二种方式，变异检测不是一个样本的事情，有越多的同类样本放在一起joint calling结果将会越准确，
+而如果样本足够多的话，在低测序深度的情况下也同样可以获得完整并且准确的结果，而这样的分步方式是应对多样本的好方法。命令如下：
+# 0. 为E.coli K12的参考序列生成一个.dict文件
+gatk CreateSequenceDictionary \
+-R ../input/E.coli/reference/E.coli_K12_MG1655.fa \
+-O ../input/E.coli/reference/E.coli_K12_MG1655.dict
+
+# 1. 生成中间文件gvcf
+gatk HaplotypeCaller \
+-R ../input/E.coli/reference/E.coli_K12_MG1655.fa \
+--emit-ref-confidence GVCF \
+-I ../output/E.coli/marked/E_coli_K12.sorted.markdup.bam \
+-O ../output/E.coli/gvcf/E_coli_K12.g.vcf
+
+# 2. 通过gvcf检测变异
+gatk GenotypeGVCFs \
+-R ../input/E.coli/reference/E.coli_K12_MG1655.fa \
+-V ../output/E.coli/gvcf/E_coli_K12.g.vcf \
+-O ../output/E.coli/gvcf/E_coli_K12.vcf
+
+#3 压缩 
+bgzip -f ../output/E.coli/gvcf/E_coli_K12.vcf
+
+#4 构建tabix索引
+tabix -p vcf ../output/E.coli/gvcf/E_coli_K12.vcf.gz
+
+对于单个样本来说，除了上面这种方式，还有三种完成变异检测的方式，这里也以人为例，放上其他方式的命令供大家选择。
+
+## 方式一，直接调用HaplotypeCaller输出样本VCF，面对较大的输入文件时，速度较慢
+gatk HaplotypeCaller \
+-R /path/to/reference/Homo_sapiens_assembly38.fasta \
+-I /path/to/sample_name.sorted.markdup.BQSR.bam \
+-O /path/to/sample_name.HC.vcf.gz
+
+## 方式二，输出这个样本每个染色体的vcf，然后在合并所有的染色体结果，目的是提高速度，这不是必须的，仅是通过分染色体获得速度的提升
+chrom=( chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY chrM )
+for i in ${chrom[@]}; do
+    gatk HaplotypeCaller \
+    -R /path/to/Homo_sapiens_assembly38.fasta \
+    -I /path/to/sample_name.sorted.markdup.BQSR.bam \
+    -L $i \
+    -O /path/to/sample_name.HC.${i}.vcf.gz
+done && wait
+merge_vcfs=""
+for i in ${chrom[@]}; do
+    merge_vcfs=${merge_vcfs}" -I /path/to/sample_name.HC.${i}.vcf.gz \\"\n
+done && gatk MergeVcfs ${merge_vcfs} -O /path/to/sample_name.HC.vcf.gz
+
+## 方式三，输出每个染色体的gvcf，然后对每个染色体单独进行GenotypeGVCFs，目的是提高速度，这不是必须的，仅是通过分染色体获得速度的提升
+chrom=( chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chr20 chr21 chr22 chrX chrY chrM )
+for i in ${chrom[@]}; do
+    gatk HaplotypeCaller \
+    --emit-ref-confidence GVCF \
+    -R /path/to/reference/Homo_sapiens_assembly38.fasta \
+    -I /path/to/sample_name.sorted.markdup.BQSR.bam \
+    -L $i \
+    -O /path/to/sample_name.HC.${i}.g.vcf.gz && \
+    gatk GenotypeGVCFs \
+    -R /path/to/reference/Homo_sapiens_assembly38.fasta \
+    -V /path/to/sample_name.HC.${i}.g.vcf.gz \
+    -O /path/to/sample_name.HC.${i}.vcf.gz
+done && wait
+merge_vcfs=""
+for i in ${chrom[@]}; do
+    merge_vcfs=${merge_vcfs}" -I /path/to/sample_name.HC.${i}.vcf.gz \\"\n
+done && gatk MergeVcfs ${merge_vcfs} -O /path/to/sample_name.HC.vcf.gz
+
+6.变异结果质控和过滤
+这是我们这个流程中的最后一步了。什么是质控？质控的含义和目的是指通过一定的标准，最大可能地剔除假阳性的结果，并尽可能地保留最多的正确数据。
+首选的质控方案是GATK VQSR(Variant Quality Score Recalibration)，它通过机器学习的方法利用多个不同的数据特征训练一个模型(高斯混合模型)对变异数据进行质控。
+
+下面是大家经常都会用到的VQSR基本命令，以human为例:
+
+## VariantRecalibrator用来进行模型计算，获得数据的情况
+## ApplyVQSR则是根据我们设定的ts_filter_level参数，最终过滤得到数据
+
+## 首先是SNP mode
+time gatk VariantRecalibrator \
+   -R $reference/Homo_sapiens_assembly38.fasta \
+   -V $outdir/poplation/${outname}.HC.vcf.gz \
+   -resource:hapmap,known=false,training=true,truth=true,prior=15.0 $GATK_bundle/hapmap_3.3.hg38.vcf \
+   -resource:omini,known=false,training=true,truth=false,prior=12.0 $GATK_bundle/1000G_omni2.5.hg38.vcf \
+   -resource:1000G,known=false,training=true,truth=false,prior=10.0 $GATK_bundle/1000G_phase1.snps.high_confidence.hg38.vcf \
+   -resource:dbsnp,known=true,training=false,truth=false,prior=2.0 $GATK_bundle/dbsnp_146.hg38.vcf \
+   -an DP -an QD -an FS -an SOR -an ReadPosRankSum -an MQRankSum \
+   -mode SNP \
+   -tranche 100.0 -tranche 99.9 -tranche 99.0 -tranche 95.0 -tranche 90.0 \
+   -rscriptFile $outdir/poplation/${outname}.HC.snps.plots.R \
+   --tranches-file $outdir/poplation/${outname}.HC.snps.tranches \
+   -O $outdir/poplation/${outname}.HC.snps.recal && \
+time $gatk ApplyVQSR \
+   -R $reference/Homo_sapiens_assembly38.fasta \
+   -V $outdir/poplation/${outname}.HC.vcf.gz \
+   --ts_filter_level 99.0 \
+   --tranches-file $outdir/poplation/${outname}.HC.snps.tranches \
+   -recalFile $outdir/poplation/${outname}.HC.snps.recal \
+   -mode SNP \
+   -O $outdir/poplation/${outname}.HC.snps.VQSR.vcf.gz && echo "** SNPs VQSR done **"
+
+## 然后是Indel mode
+time $gatk VariantRecalibrator \
+   -R $reference/Homo_sapiens_assembly38.fasta \
+   -input $outdir/poplation/${outname}.HC.snps.VQSR.vcf.gz \
+   -resource:mills,known=true,training=true,truth=true,prior=12.0 $GATK_bundle/Mills_and_1000G_gold_standard.indels.hg38.vcf \
+   -resource:dbsnp,known=true,training=false,truth=false,prior=2.0 $GATK_bundle/dbsnp_146.hg38.vcf \
+   -an DP -an QD -an FS -an SOR -an ReadPosRankSum -an MQRankSum \
+   -mode INDEL \
+   --max-gaussians 6 \
+   -rscriptFile $outdir/poplation/${outname}.HC.snps.indels.plots.R \
+   --tranches-file $outdir/poplation/${outname}.HC.snps.indels.tranches \
+   -O $outdir/poplation/${outname}.HC.snps.indels.recal && \
+time $gatk ApplyVQSR \
+   -R $reference/Homo_sapiens_assembly38.fasta \
+   -input $outdir/poplation/${outname}.HC.snps.VQSR.vcf.gz \
+   --ts_filter_level 99.0 \
+   --tranches-file $outdir/poplation/${outname}.HC.snps.indels.tranches \
+   -recalFile $outdir/poplation/${outname}.HC.snps.indels.recal \
+   -mode INDEL \
+   -O $outdir/poplation/${outname}.HC.VQSR.vcf.gz && echo "** SNPs and Indels VQSR (${outname}.HC.VQSR.vcf.gz finish) done **"
+   不幸的是，使用VQSR需要具备以下两个条件：
+第一，需要一个精心准备的已知变异集，它将作为训练质控模型的真集。人类的基因组数据，就有一套适合用来训练过滤模型的已知变异集(dbSNP，1000G，Hapmap和omini等)。
+GATK的bundle主要就是对这些高质量的数据集做了精心的处理和选择，然后把它们作为VQSR时的真集位点。强调一点，是真集的『位点』而不是真集的『数据』！
+因为，VQSR并不是用这些变异集里的数据来训练的，而是用我们自己的变异数据。
+实际上，这些已知变异集的意义是告诉我们群体中哪些位点存在着变异，如果在其他人的数据里能观察到落入这个集合中的变异位点，那么这些被已知集包括的变异就有很大的可能是正确的。
+也就是说，我们可以从数据中筛选出那些和真集『位点』相同的变异，把它们当作是真实的变异结果。接着，进行VQSR的时候，程序就可以用这个筛选出来的数据作为真集数据来训练，并构造模型了。
+第二，要求新检测的结果中有足够多的变异，不然VQSR在进行模型训练的时候会因为可用的变异位点数目不足而无法进行。
+
+很遗憾我们这个E.coli K12的变异结果并不适合通过VQSR来进行过滤，那么碰到这种情况的时候该怎么办？这个时候，我们就不得不选择硬过滤的方式来质控了。
+所谓硬过滤其实就是通过人为设定一个或者若干个指标阈值（也可以叫数据特征值），然后把所有不满足阈值的变异位点采用一刀切掉的方法。
+我们可以直接使用GATK VQSR所用的指标来执行硬过滤——毕竟这些指标都是经过精挑细选的，既然VQSR就是用这些指标来训练质控模型的，
+那么它们就可以在一定程度上描述每个变异的质量，我们用这些指标设置对应的阈值来进行硬过滤也将是合理的。
+
+对于本文的例子，执行硬过滤，命令如下：
+
+# 使用SelectVariants，选出SNP
+gatk SelectVariants \
+-select-type SNP \
+-V ../output/E.coli/gvcf/E_coli_K12.vcf.gz \
+-O ../output/E.coli/sel/E_coli_K12.snp.vcf.gz
+
+# 为SNP作硬过滤
+gatk VariantFiltration \
+-V ../output/E.coli/sel/E_coli_K12.snp.vcf.gz \
+--filter-expression "QD < 2.0 || MQ < 40.0 || FS > 60.0 || SOR > 3.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0" \
+--filter-name "Filter" \
+-O ../output/E.coli/sel/E_coli_K12.snp.filter.vcf.gz
+
+# 使用SelectVariants，选出Indel
+gatk SelectVariants \
+-select-type INDEL \
+-V ../output/E.coli/gvcf/E_coli_K12.vcf.gz \
+-O ../output/E.coli/sel/E_coli_K12.indel.vcf.gz
+
+# 为Indel作过滤
+gatk VariantFiltration \
+-V ../output/E.coli/sel/E_coli_K12.indel.vcf.gz \
+--filter-expression "QD < 2.0 || FS > 200.0 || SOR > 10.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0" \
+--filter-name "Filter" \
+-O ../output/E.coli/sel/E_coli_K12.indel.filter.vcf.gz
+
+# 重新合并过滤后的SNP和Indel
+gatk MergeVcfs \
+-I ../output/E.coli/sel/E_coli_K12.snp.filter.vcf.gz \
+-I ../output/E.coli/sel/E_coli_K12.indel.filter.vcf.gz \
+-O ../output/E.coli/sel/E_coli_K12.filter.vcf.gz
+
+# 删除无用中间文件
+rm -f ../output/E.coli/sel/E_coli_K12.snp.vcf.gz* \
+../output/E.coli/sel/E_coli_K12.snp.filter.vcf.gz* \
+../output/E.coli/sel/E_coli_K12.indel.vcf.gz* \
+../output/E.coli/sel/E_coli_K12.indel.filter.vcf.gz*
+
+不管我们的指标和阈值设置的多么完美，硬过滤的硬伤都是一刀切，它并不会根据多个维度的数据自动设计出更加合理的过滤模式。
+硬过滤作为一个简单粗暴的方法，不到不得已的时候不推荐使用，即使使用了，也一定要明白每一个过滤指标和阈值都意味着什么。
+
+7.小结
+到这里，这篇文章就结束了。文章基本包含了WGS实践的一个基本流程，但也仅仅只是一个流程的搭建。我们的个人能力不能只是会跑一个流程，
+我想，更深层次地，是要去掌握如何分析数据的能力，如何发现问题和解决数据问题等的能力，理解问题的本质，选择合适的工具，而不是反过来被工具所束缚。
+毕竟，工具是死的，人是活的，用聪明的脑袋去灵活地使用工具。
