@@ -82,6 +82,12 @@ fastqc -q -t 4 -o ./fastqc_result/ *.fastq.gz &
 3.2： multiqc可以对几个fastqc报告文件进行总结并汇总到一个报告文件中，以更直观到防止展示。
 multiqc <analysis directory> 
 
+3.3：查看Q30
+/data/pub/youmengcheng/ymc/biosoft/fqcheck -InFq1 C_1_R1_val_1.fq.gz -OutStat1 C_1_R1_val_1 -InFq2 C_1_R2_val_2.fq.gz -OutStat2 C_1_R2_val_2
+后缀为C_1_R1_val_1.fqcheck,C_1_R2_val_2.fqcheck
+
+readfq C_1_R1_val_1.fq.gz
+
 4：数据过滤
 
 4.1：Trimmomatic
@@ -149,8 +155,8 @@ hisat2 -p 16 -x ./grch38_tran/genome_tran -1 SRR534293_1.fastq -2 SRR534293_2.fa
 hisat2 -p 6 -x <dir of index of genome> -1 seq_val_1.fq.gz -2 seq_val_2.fq.gz -S tem.hisat2.sam
 hisat2 -t -x /Users/yqWang/Local/wangyiqi/reference/index/hg38/genome -1 ZL1_2_1_val_1.fq.gz -2 ZL1_2_2_val_2.fq.gz -S ZL1_2.sam
 
-hisat2 -p 10 -x /data/pub/youmengcheng/ymc/index/hisat2-index/cpap_ref -1 /data/pub/youmengcheng/ymc/cleandata/PRNA202178TY_S11_R1.fastq.gz 
--2 /data/pub/youmengcheng/ymc/cleandata/PRNA202178TY_S11_R2.fastq.gz 
+hisat2 -t -p 10 -x /data/pub/youmengcheng/ymc/index/hisat2-index/cpap_ref -1 /data/pub/youmengcheng/ymc/cleandata/PRNA202178TY_S11_R1.fastq.gz \
+-2 /data/pub/youmengcheng/ymc/cleandata/PRNA202178TY_S11_R2.fastq.gz \
 -S /data/pub/youmengcheng/ymc/cpap/PRNA202178TY_S11.sam
 
 5.2:STAR
