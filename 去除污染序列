@@ -1,0 +1,160 @@
+bowtie2去除污染
+
+一、需要准备的：
+
+转录组测序数据
+rRNA参考序列
+seqkit软件
+Bowtie2软件
+samtools软件（可以不用）
+
+二、具体步骤
+1.转录组测序数据：这个网上很多在NCBI上下载的帖子，可以查一下，或者直接使用后面下载的rRNA参考序列造一批数据做测试。
+
+2.rRNA参考序列的获取：
+我的样本物种是人类的，因此，需要的是人类的rRNA参考序列。
+首先，打开NCBI的网站，网址：
+在搜索栏输入“Homo sapiens”搜索人类的信息。
+搜索的结果中，有一个“GCF_000001405.39”，记住它！其他的物种的话，其编号可能是GCA开头的一串字符，一般来说，有GCF开头的用GCF开头的。
+这个时候，你已经记下了一个物种参考序列的ID号/版本号，再返回到NCBI的首页网站，对，就是刚才搜索的那个，
+下拉网页到最底部，找到“NCBI FTP Site”这个链接，这是NCBI的FTP站点，点击它。
+进到NCBI的FTP站点之后，根据你刚才记下的参考序列版本号“GCF_000001405.39”，在站点里依次进入“genomes”-“all”-“GCF”-“000”-“001”-“405”。
+最后你会发现人类的一切都在你的面前！留心的人可能注意到此时的FTP站点网址为：https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/，是的，是我们刚才记下的ID所组成的，
+因此，如果得到其他物种的ID，也可以直接按照这个格式去到相应的页面。
+
+xx.rna.fna.gz
+xx.rna_from_genomic.fna.gz
+这两种格式均为rna序列文件
+
+下载好人类rna序列之后解压，那么我们需要提取其中的rRNA序列，用作后续去除rRNA。
+
+先查看下“GCF_000001405.25_GRCh37.p13_rna_from_genomic.fna”的序列id信息行，命令：
+cat GCF_000001405.25_GRCh37.p13_rna_from_genomic.fna | grep "^>" | less -S
+
+可以看到，“gbkey”这个关键字提示这个rna是哪种rna，因此，可以考虑获取rRNA序列的id信息行，查看命令：
+cat GCF_000001405.25_GRCh37.p13_rna_from_genomic.fna | grep "^>" | grep "gbkey=rRNA" | less -S
+
+得到rRNA的id信息行之后，你可以自己写脚本将rRNA序列提出来，也可以使用seqkit软件提取。
+
+提取rRNA的id，即id信息行的第一个空格前的字符串，输出到文本。（id信息行和id是不同的。）命令：
+cat GCF_000001405.25_GRCh37.p13_rna_from_genomic.fna | grep "^>" | grep "gbkey=rRNA" | awk '{print $1}'|sed 's/>//g' > id.list
+
+linux下，解压后的seqkit是可以直接使用的，提取对应ID的序列，命令：
+seqkit grep -f id.list GCF_000001405.25_GRCh37.p13_rna_from_genomic.fna > rRNA.fa
+至此，rRNA参考序列的获取已完成，可以进入下一步。
+
+3、bowtie2下载和参考序列构建index
+构建rRNA.fa的index：
+命令：
+bowtie2-build rRNA.fa rRNA
+到这里所有的准备工作都做完了，下面一步就是去除rRNA。
+
+4、bowtie2去除rRNA（samtools 生成bam）
+命令：
+bowtie2 --very-sensitive-local --no-unal -I 1 -X 1000 -p 6 -x rRNA -1 R1.fq.gz -2 R2.fq.gz --un-conc-gz sample_rRNAremoved.fq.gz 2>sample_Map2rRNAStat.xls \
+| samtools view -S -b -o sample_Map2rRNA.bam -
+
+--very-sensitive-local --no-unal -I 1 -X 1000：这几个参数不描述，可以看看bowtie2的帮助页；
+-p：线程数。
+-x：参考序列的前缀（就是bowtie2-build rRNA.fa rRNA中的第二个参数）。
+-1，-2：分别接测序数据的R1和R2，没有R2的话，只需要-1。
+--un-conc-gz：比对不上的序列，以此前缀输出。
+sample_Map2rRNAStat.xls是bowtie2最后给出的比对结果，包括比对率、唯一比对、多重比对率等。
+后面可以直接通过管道命令“|”，接samtools view -S -b -o sample_Map2rRNA.bam - 直接输出比对到rRNA的bam文件，用作其他分析。也可以不用samtools，直接 通过 ">"输出成 sam 文件。
+
+
+cat GCF_000175795.2_ASM17579v2_rna_from_genomic.fna | grep "^>" | grep "gbkey=rRNA" | awk '{print $1}'|sed 's/>//g' > id.list
+seqkit grep -f id.list GCF_000175795.2_ASM17579v2_rna_from_genomic.fna > rRNA.fa
+
+
+bowtie2 --very-sensitive-local --no-unal -I 1 -X 1000 -p 6 -x rRNA \
+-1 /data/pub/youmengcheng/ymc/cleandata/C_1_R1_val_1.fq.gz -2 /data/pub/youmengcheng/ymc/cleandata/C_1_R2_val_2.fq.gz \
+--un-conc-gz sample_rRNAremoved.fq.gz 2>sample_Map2rRNAStat.xls | samtools view -S -b -o sample_Map2rRNA.bam -
+bowtie2跑完之后，将得到几个文件：
+*rRNAremoved的R1和R2的fq，这个就是我们最后想拿到的，去除了rRNA的序列，用于后续分析；
+*Map2rRNA.bam,比对上rRNA的bam；
+sort和bai是我做了sort和index得到，不需要的可以不做；
+*Map2rRNAStat.xls是比对到rRNA的情况。
+最后，得到 *rRNAremoved.fq.1.gz 和 *rRNAremoved.fq.2.gz，就是去除rRNA序列之后的转录组数据。
+
+1.去除rRNA
+bowtie2-build /data/pub/youmengcheng/ymc/reference/rRNA.fa rRNA
+
+bowtie2 --very-sensitive-local --no-unal -I 1 -X 1000 -p 6 -x rRNA \
+-1 /data/pub/youmengcheng/ymc/cleandata/C_1_R1_val_1.fq.gz -2 /data/pub/youmengcheng/ymc/cleandata/C_1_R2_val_2.fq.gz \
+--un-conc-gz sample_rRNAremoved.fq.gz 2>sample_Map2rRNAStat.xls | samtools view -S -b -o sample_Map2rRNA.bam -
+
+2.去除宿主污染
+bowtie2 --very-sensitive -p 6 -x /data/pub/youmengcheng/ymc/reference/aeromans/aeromans_ref \
+-1 /data/pub/youmengcheng/ymc/cleandata/S_2_R1_val_1.fq.gz -2 /data/pub/youmengcheng/ymc/cleandata/S_2_R2_val_2.fq.gz \
+-S /data/pub/youmengcheng/ymc/cleandata/S_2.sam --un-conc-gz sample_rRNAremoved.fq.gz
+
+
+
+用bowtie2去宿主污染
+bowtie2是用于比对的软件，但是有个参数可将未比对上的序列输出，因此，以污染物基因组为参考基因组进行比对，为比对上的就是我们需要的
+
+1.bowtie2建立索引(假设污染物参考基因组为genomic.fa)
+bowtie2-build  genomic.fa  genomic
+2.开始比对
+bowtie2 -p 15 -x genomic -1 sample_R1.fq -2 sample_R2.fq -S sample.sam --un-conc sample.fq 
+主要的那个参数就是--un-conc
+
+具体含义可使用bowtie2 -h 查看函数参数说明或者参考以下链接:
+http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#options
+
+生成的结果文件有：
+sample.1.fq
+sample.2.fq
+sample.sam
+
+对于宿主（动植物）来源的宏基因组、（宏）转录组，去除宿主序列污染对于序列拼接等分析的准确定至关重要，
+我们可以通过将raw reads或初步质控后的clean reads与宿主的基因组序列进行多重比对，提取其中未比对上的序列，就可以获得去除了宿主序列的reads。
+由于做人体微生物的比较多，所以这里以人宿主污染为例。
+
+1、下载人类基因组，构建bowtie比对数据库
+
+在https://hgdownload.soe.ucsc.edu/goldenPath/hg19/chromosomes/可以找到hg19的人基因组序列数据。
+wget --timestamping 'ftp://hgdownload.cse.ucsc.edu/goldenPath/hg19/chromosomes/*'
+下载所有序列数据，或者只下载23对染色体的序列数据也就是ch'r*.fa.gz.
+tar -xzvf * | cat > hg19.fa
+解压所有序列并合并为一个fasta文件。
+使用bowtie2的bowtie-build命令构建比对数据库：
+
+bowtie2-build hg19.fa hg19
+
+2、使用bowtie进行多重比对，当然这里也可以选择bwa之类的工具也都可以。
+
+bowtie2 -x hg19 -p 90 -1 lib1 -2 lib2 -S host_mapped.sam
+
+-x为比对数据库，如果不在当前路径前面要加上路径信息。
+-p为使用多少个线程，我这里用的90
+-1 -2后面是双端序列的两个fastq文件
+-S为比对结果的sam文件
+
+3、用samtoos对比对结果进行格式转换，提取其中的未比对序列。
+
+首先将二进制的sam文件转为bam格式的文本文件
+
+samtools view -@ 10 -bS host_mapped.sam > host_mapped.bam
+
+-@为使用的线程数
+-b表示输出bam格式 S表示自动检测输入文件格式
+结果通过>重定向保存成一个bam文件
+
+然后将未比对上的序列提取出来
+samtools view -b -@ 10 -f 12 -F 256 host_mapped.bam > host_unmapped.bam
+
+-f 和-F通过比对结果的flag信息共同将比对或未比对上的序列提取出来, 这一部分可以看一下samtools的说明。
+-f 表示只包含有后面该flag信息的序列。因为我们是双端序列，这里我们应该输入的数值是4+8，也就是12.-F表示仅包含没有该flag的序列，这里我们不需要比对上的序列，也就是256.
+
+最后将bam文件排下序整理一下。
+samtools sort -@ 10 -n host_unmapped.bam host_unmapped_sorted.bam
+
+4、用bedtools将bam文件转为fastq格式的序列数据。
+最后一步是将提取并排序好的bam文件中的序列和质量信息提取出来，转换成fastq格式的数据，使用bedtools工具来完成。
+
+bedtools bamtofastq -i host_unmapped_sorted.bam -fq host_removed_1.fq -fq2 host_removed_2.fq
+
+-fq和-fq2分别表示正反向序列。
+到这里就完成了序列的宿主过滤。其他宿主除了参考基因组不一样，其余过程都是相同的。
