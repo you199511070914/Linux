@@ -39,6 +39,7 @@ find /data/RNAseq/cleandata/stringtiedata/ -name *.gtf > /data/RNAseq/cleandata/
 cat /data/RNAseq/cleandata/stringtiedata/merglist.txt
 
 stringtie --merge -p 8 -G /data/mouse_annotation/gencode.mouse.annotation.gtf -o cleandata/stringtiedata/stringtie_merged.gtf cleandata/stringtiedata/merglist.txt
+#merglist.txt是自己创建的
 
 3. 使用gffcompare检验数据比对到基因组上的情况(可选)
 将前面我们整合的转录本文件检验数据比对到基因组上的情况
@@ -57,6 +58,15 @@ cat cleandata/stringtiedata/gffcompare.stats
 mkdir cleandata/ballgown
 for i in CK-4 CK-7 CK-8 HGJ-10 HGJ-6 HGJ-9; do stringtie -e -B -p 8 -G cleandata/stringtiedata/stringtie_merged.gtf \
 -o cleandata/ballgown/${i}/${i}.gtf cleandata/samtools_bam/${i}_sort.bam; done
+
+在-B 指定的文件夹下生成特定的文件 
+e2t.ctab e_data.ctab i2t.ctab i_data.ctab t_data.ctab 
+
+e_data.ctab: 外显子水平表达值
+i_data.ctab:内显子水平表达值
+t_data.ctab:转录组水平表达值
+e2t.ctab:表中有两列，e_id和t_id，表示哪些外显子属于哪些转录本。这些id与e_data和t_data表中的id匹配。
+i2t.ctab:表中有两列，i_id和t_id，表示哪些内含子属于哪些转录本。这些id与i_data和t_data表中的id匹配。
 
 5.read count数据输出
 这里需要prepDE.py这个脚本。
