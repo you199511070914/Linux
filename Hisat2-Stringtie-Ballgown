@@ -1,0 +1,72 @@
+1.Hisat2
+
+extract_exons.py Sus_scrofa.Sscrofa11.1.90.chr.gtf > genome.exon 
+extract_splice_sites.py Sus_scrofa.Sscrofa11.1.90.chr.gtf > genome.ss
+hisat2-build –ss genome.ss –exon genome.exon Sus_scrofa.Sscrofa11.1.dna.toplevel.fa Sus_tran 
+
+hisat2 -p 8 –dta -x ./ref/Sus_tran/Sus_tran -1 ./fastq/Blast_1.clean.fq -2 ./fastq/Blast_2.clean.fq -S ./hisat2-out/Blast.sam 
+
+将sam文件转换为bam文件 
+samtools view -S ./hisat2-out/Blast.sam -b > ./BAM/Blast.bam 
+bam文件排序#因为是双端测序，必须对bam文件排序 
+samtools sort -n ./BAM/Blast.bam ./BAM/Blast_sort.bam 
+samtools view -h ./BAM/Blast_sort.bam > ./SAM/Blast_sort.sam 
+htseq-count -s no ./SAM/Blast_sort.sam genes.gtf > ./reads count/Blast.count
+
+
+for ((i=22;i<=23;i++));do samtools sort SRR53377${i}.bam -o SRR53377${i}.sorted_bam;done
+#随后用featurecounts计数
+for ((i=19;i<=23;i++));do featureCounts -T 5 -p -t exon -g gene_id  -a /mnt/d/biotech/chip/ref/gencode.vM10.annotation.gtf.gz -o ${i}.counts.txt SRR53377${i}_sorted.bam;done
+
+StringTie 是用于 RNA-seq 的转录本组装和定量软件，StringTie 可以看做是cufflinks软件的升级版本，其功能和Cufflinks是一样的，包括下面两个主要功能：转录本组装和定量；相比Cuffinks, 其运行速度更快。该软件的官网：https://ccb.jhu.edu/software/stringtie/index.shtml
+
+1.单样本转录本组装
+gencode.mouse.annotation.gtf文件在/data/mouse_annotation/ 目录下：
+单样本组装：
+stringtie -p 8 -G /data/mouse_annotation/gencode.mouse.annotation.gtf -o cleandata/stringtiedata/CK-4.gtf cleandata/samtools_bam/CK-4_sort.bam
+批量处理：
+for i in CK-7 CK-8 HGJ-10 HGJ-6 HGJ-9;do stringtie -p 8 -G /data/mouse_annotation/gencode.mouse.annotation.gtf \
+-o cleandata/stringtiedata/${i}.gtf cleandata/samtools_bam/${i}_sort.bam;done
+
+查看输出结果：
+ll -h cleandata/stringtiedata/
+
+2.多样本转录本整合
+将文件名的完整路径输入到一个文件中：
+find /data/RNAseq/cleandata/stringtiedata/ -name *.gtf > /data/RNAseq/cleandata/stringtiedata/merglist.txt
+
+查看一下merglist.txt文件中的内容：
+cat /data/RNAseq/cleandata/stringtiedata/merglist.txt
+
+stringtie --merge -p 8 -G /data/mouse_annotation/gencode.mouse.annotation.gtf -o cleandata/stringtiedata/stringtie_merged.gtf cleandata/stringtiedata/merglist.txt
+
+3. 使用gffcompare检验数据比对到基因组上的情况(可选)
+将前面我们整合的转录本文件检验数据比对到基因组上的情况
+gffcompare -r /data/mouse_annotation/gencode.mouse.annotation.gtf -G cleandata/stringtiedata/stringtie_merged.gtf
+其中gffcompare.annotated.gtf存储的是StringTie组装的转录本与注释文件内的转录本的差别信息，通过class_code来表示：
+head cleandata/stringtiedata/gffcompare.annotated.gtf |grep  class_code | cut -d ";" -f 5-8
+
+head cleandata/stringtiedata/gffcompare.annotated.gtf |grep  class_code | cut -d ";" -f 5-8 \
+
+gffcmp.stats文件存储比对结果的准确性和预测率。
+gffcompare -r /data/mouse_annotation/gencode.mouse.annotation.gtf -G cleandata/stringtiedata/stringtie_merged.gtf -o cleandata/stringtiedata/gffcompare
+cat cleandata/stringtiedata/gffcompare.stats
+
+4.重新组装转录本并估算基因表达丰度
+利用merge得到的gtf重新对各个样本做定量，并创建ballgown可读取文件。
+mkdir cleandata/ballgown
+for i in CK-4 CK-7 CK-8 HGJ-10 HGJ-6 HGJ-9; do stringtie -e -B -p 8 -G cleandata/stringtiedata/stringtie_merged.gtf \
+-o cleandata/ballgown/${i}/${i}.gtf cleandata/samtools_bam/${i}_sort.bam; done
+
+5.read count数据输出
+这里需要prepDE.py这个脚本。
+prepDE.py -i cleandata/ballgown/
+会在当前文件夹下产生2个csv文件。
+这里得到的gene_count_matrix.csv数据就可以用于后续的下游分析了，比如差异表达分析。
+
+
+
+
+
+
+
