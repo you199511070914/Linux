@@ -225,7 +225,7 @@ tophat2 -p 2 -G /data/plant_genome/Lj3.0/Lj3.0_gene.gtf -o tophat_output /data/p
 
 6： samtools
 samtools view -S seq.sam -b > seq.bam  #文件格式转换
-samtools sort seq.bam -0 seq_sorted.bam  ##将bam文件排序
+samtools sort seq.bam -o seq_sorted.bam  ##将bam文件排序
 samtools index seq_sorted.bam  #对排序后对bam文件索引生成bai格式文件，用于快速随机处理。
 samtools flagstate seq_sorted.bam > seq_sorted.flagstate
 
@@ -254,7 +254,8 @@ htseq-count -f bam -r pos /data/pub/youmengcheng/ymc/cpap/PRNA202178TY_S11_val_s
 > PRNA202178TY_S11_val.count.tab
 
 7.2： feature counts计算RNA-seq测序reads对在基因组中对比对深度。
-feature counts -T 6 -t exon -g gene_id -a <gencode.gtf> -o seq_featurecount.txt <seq.bam>
+featureCounts -T 6 -p -t exon -g gene_id -a /data/pub/youmengcheng/ymc/reference/GCF_000175795.2_ASM17579v2_genomic.gtf \
+-o PRNA202178TY_S11_val_sorted.txt /data/pub/youmengcheng/ymc/cpap/PRNA202178TY_S11_val_sorted.bam
 # -g注释文件中提取对Meta-feature 默认是gene_id
 # -t提取注释文件中的Meta-feature 默认是 exon
 # -p参数是针对paired-end 数据
