@@ -89,6 +89,9 @@ bowtie2 --very-sensitive -p 6 -x /data/pub/youmengcheng/ymc/reference/aeromans/a
 -1 /data/pub/youmengcheng/ymc/cleandata/S_2_R1_val_1.fq.gz -2 /data/pub/youmengcheng/ymc/cleandata/S_2_R2_val_2.fq.gz \
 -S /data/pub/youmengcheng/ymc/cleandata/S_2.sam --un-conc-gz sample_rRNAremoved.fq.gz
 
+hisat2 -t -p 8 -x /data/pub/youmengcheng/ymc/index/hisat2-index/ncbi_cpap \
+-1 /data/pub/youmengcheng/ymc/cleandata/sample_rRNAremoved.fq.1.gz -2 /data/pub/youmengcheng/ymc/cleandata/sample_rRNAremoved.fq.2.gz \
+-S /data/pub/youmengcheng/ymc/cpap/remove_S2.sam
 
 
 用bowtie2去宿主污染
