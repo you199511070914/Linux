@@ -75,8 +75,85 @@ prepDE.py -i cleandata/ballgown/
 这里得到的gene_count_matrix.csv数据就可以用于后续的下游分析了，比如差异表达分析。
 
 
+Ballgown包
+RSkittleBrewer（用于设置颜色）
+genefilter（用于快速计算均值和方差）
+dplyr（用于分类和排列结果）
+devtools（用于再现性和安装包）
 
+1. 安装
+source("https://bioconductor.org/biocLite.R") 
+biocLite("ballgown")
+library(dplyr) 
+install.packages("dplyr")
+library(devtools)
+install.packages("devtools")
+library(genefilter)
+source("https://bioconductor.org/biocLite.R") 
+biocLite("genefilter")
+library("RSkittleBrewer")
+devtools::install_github('RSkittleBrewer', 'alyssafrazee')
 
+#加载要用的语言包
+library(ballgown)
+library(RSkittleBrewer)
+library(genefilter)
+library(dplyr)
+library(devtools)
+getwd()
+set()  # 修改当前路径至数据位置，加“”
+
+read.csv("geuvadis_phenodata1.csv")      #读取表型数据，数据分组信息
+pheno_data <- read.csv("geuvadis_phenodata1.csv")
+bg_chrX = ballgown(dataDir = "C:/Users/Administrator/Documents/R/hisat2 stringtie ballgown/ballgown",samplePattern = "ERR", pData = pheno_data)
+#dataDir 告知数据路径， samplePattern 依据样本的名字来， pData 指明数据关系，这里面的第一列样本必须和ballgown下面的文件名一样，否则会报错。
+
+bg_chrX_filt = subset(bg_chrX, "rowVars(texpr(bg_chrX)) > 1", genomesubset = TRUE)
+#滤掉低丰度的基因，这里选择过滤掉样本间差异少于一个转录本的数据
+
+result_transcripts = stattest(bg_chrX_filt, feature = "transcript", covariate = "sex", adjustvars = c("population"), getFC = TRUE, meas = "FPKM")
+result_transcripts   #确定组件有差异的转录本，在这里我们比较的性别之间的基因差异，
+指定的分析参数是“transcripts”，主变量是“sex",修正变量是"population",getFC可以指定输出结果显示组间表达量的foldchange。
+
+result_genes = stattest(bg_chrX_filt, feature = "gene", covariate = "sex", adjustvars = c("population"), getFC = TRUE, meas = "FPKM")
+result_genes  #确定各组间有差异的基因
+result_transcripts = data.frame(geneNames = ballgown::geneNames(bg_chrX_filt), geneIDs = ballgown::geneIDs(bg_chrX_filt), result_transcripts)
+result_transcripts #为组间有差异的转录本添加基因名？？？？？不理解
+
+result_transcripts = arrange(result_transcripts, pval)   #按照p-value值从小到大排序
+result_genes = arrange(result_genes, pval)
+
+write.csv(result_transcripts, "chrX_transcript_results.csv", row.names = FALSE)     #将两个结果写到csv文件中
+write.csv(result_genes, "chrX_gene_results.csv", row.names = FALSE)
+
+subset(result_transcripts, result_transcripts$qval < 0.05)        #从以上的输出中选出q值<0.05的转录本和基因，即性别表达有差异的基因
+subset(result_genes, result_genes$qval < 0.05)
+tropical = c('darkorange', 'dodgerblue', 'hotpink', 'limegreen', 'yellow')        #赋予调色板5个指定颜色
+palette(tropical)
+fpkm = texpr(bg_chrX, meas = "FPKM")     #以FPKM为参考值作图，以性别作为区分条件
+fpkm = log2(fpkm + 1)         #方便作图，将其log转化，+1是为了别面出现log2(0)的情况
+boxplot(fpkm, col = as.numeric(pheno_data$sex), las = 2, ylab = 'log2(FPKM + 1)')
+#以上完整做出箱线图
+
+#就单个转录本做箱线图
+ballgown::transcriptNames(bg_chrX)[12]
+ballgown::geneNames(bg_chrX)[12]
+
+plot(fpkm[12,] ~ pheno_data$sex, border = c(1,2),main = paste(ballgown::geneNames(bg_chrX)[12],' : ',
+ballgown::transcriptNames(bg_chrX)[12]), pch = 19, xlab = "Sex",ylab = 'log2(FPKM + 1)')
+
+points(fpkm[12,] ~ jitter(as.numeric(pheno_data$sex)),col = as.numeric(pheno_data$sex))  
+# 这一步作用是？？male做出来和原图有细微不同
+
+#查看某一基因位置上所有转录本
+# plotTranscripts函数可以根据指定基因的id画出在特定区段的转录本
+# 可以通过sample函数指定看在某个样本中的表达情况，这里选用id=1750, sample=ERR188234
+plotTranscripts(ballgown::geneIDs(bg_chrX)[1750], bg_chrX, main = c('Gene MSTRG.575 in sample ERR188234'), sample = c('ERR188234'))
+#不成功？？？
+
+#以性别为区分，查看表达情况
+# 这里以id=575的基因为例（对应上一步作图）
+plotMeans('MSTRG.575', bg_chrX_filt, groupvar = "sex", legend = FALSE)
 
 
 
