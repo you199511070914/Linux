@@ -1,26 +1,137 @@
+nohup fastqc filename.fq  & for i in *fastq; 
+do
+i=${i%fastq*}; 
+fastqc ${i}fastq
+done
+
 1.Hisat2
 
+wget ftp://ftp.ccb.jhu.edu/pub/infphilo/hisat2/downloads/hisat2-2.1.0-Linux_x86_64.zip
+unzip hisat2-2.1.0-Linux_x86_64.zip
+echo 'export PATH=/home/yt/biotools/hisat2-2.1.0/bin:$PATH' >> ~/.bashrc
+
+1.1
 extract_exons.py Sus_scrofa.Sscrofa11.1.90.chr.gtf > genome.exon 
 extract_splice_sites.py Sus_scrofa.Sscrofa11.1.90.chr.gtf > genome.ss
 hisat2-build –ss genome.ss –exon genome.exon Sus_scrofa.Sscrofa11.1.dna.toplevel.fa Sus_tran 
-
 hisat2 -p 8 –dta -x ./ref/Sus_tran/Sus_tran -1 ./fastq/Blast_1.clean.fq -2 ./fastq/Blast_2.clean.fq -S ./hisat2-out/Blast.sam 
 
-将sam文件转换为bam文件 
-samtools view -S ./hisat2-out/Blast.sam -b > ./BAM/Blast.bam 
+1.2
+建立索引
+./extract_splice_sites.py /home/yt/Documents/数据/chrX_data/genes/chrX.gtf > /home/yt/Documents/数据/chrX_data/genes/chrX.ss
+./extract_exons.py /home/yt/Documents/数据/chrX_data/genes/chrX.gtf > /home/yt/Documents/数据/chrX_data/genes/chrX.exon
+hisat2-build --ss chrX.ss --exon chrX.exon chrX_data/genome/chrX.fa chrX_tran
+进行批量比对
+for i in {188044,188104,188234,188245,188257,188273,188337,188383,188401,188428,188454,204916};do hisat2 -p 4 -x chrX_data/indexes/chrX_tran \
+-1 chrX_data/samples/ERR${i}_chrX_1.fastq.gz -2 chrX_data/samples/ERR${i}_chrX_2.fastq.gz \
+-S ERR${i}_chrX.sam done
+
+2.samtools && gffcompare
+gffcompare：将基因和转录本与注释进行比较，并报告有关此比较的统计数据，确定组装的转录本是否完全或部分地匹配注释的基因，并计算出多少完全是新的
+
+sudo apt install samtools 
+wget http://ccb.jhu.edu/software/stringtie/dl/gffcompare-0.11.5.Linux_x86_64.tar.gz
+tar -zxvf gffcompare-0.11.5.tar.gz
+echo 'export PATH=/home/yt/biotools/gffcompare-0.11.5.Linux_x86_64:$PATH' >> ~/.bashrc
+
+2.1:
+sam文件转化成bam文件：
+samtools view -bS /home/yt/Documents/数据/chrX_data/results/hisat2/ERR188044.sam > /home/yt/Documents/数据/chrX_data/results/stringtie/ERR188044.bam
+排序：
+samtools sort /home/yt/Documents/数据/chrX_data/results/stringtie/bam/ERR188044.bam /home/yt/Documents/数据/chrX_data/results/stringtie/bam/ERR188044.sort.bam
+2.2:
+samtools view -bS ./hisat2-out/Blast.sam > ./BAM/Blast.bam 
 bam文件排序#因为是双端测序，必须对bam文件排序 
 samtools sort -n ./BAM/Blast.bam ./BAM/Blast_sort.bam 
 samtools view -h ./BAM/Blast_sort.bam > ./SAM/Blast_sort.sam 
-htseq-count -s no ./SAM/Blast_sort.sam genes.gtf > ./reads count/Blast.count
 
+htseq-count -s no ./SAM/Blast_sort.sam genes.gtf > ./reads count/Blast.count
 
 for ((i=22;i<=23;i++));do samtools sort SRR53377${i}.bam -o SRR53377${i}.sorted_bam;done
 #随后用featurecounts计数
 for ((i=19;i<=23;i++));do featureCounts -T 5 -p -t exon -g gene_id  -a /mnt/d/biotech/chip/ref/gencode.vM10.annotation.gtf.gz -o ${i}.counts.txt SRR53377${i}_sorted.bam;done
 
-StringTie 是用于 RNA-seq 的转录本组装和定量软件，StringTie 可以看做是cufflinks软件的升级版本，其功能和Cufflinks是一样的，包括下面两个主要功能：转录本组装和定量；相比Cuffinks, 其运行速度更快。该软件的官网：https://ccb.jhu.edu/software/stringtie/index.shtml
+3.StringTie 是用于 RNA-seq 的转录本组装和定量软件，StringTie 可以看做是cufflinks软件的升级版本，其功能和Cufflinks是一样的，
+包括下面两个主要功能：转录本组装和定量；相比Cuffinks, 其运行速度更快。该软件的官网：https://ccb.jhu.edu/software/stringtie/index.shtml
+
+wget http://ccb.jhu.edu/software/stringtie/dl/stringtie-2.0.4.Linux_x86_64.tar.gz
+tar -zvxf stringtie-2.0.4.Linux_x86_64.tar.gz
+echo 'export PATH=/home/yt/biotools/stringtie-2.0.4.Linux_x86_64:$PATH' >> ~/.bashrc
+
 
 1.单样本转录本组装
+3.1.1
+进行拼接：会对每个bam文件生产一个gtf文件，主要记录i转录本的组装信息。
+for i in {188044,188104,188234,188245,188257,188273,188337,188383,188401,188428,188454,204916};do stringtie -p 8 -G \
+./genes/chrX.gtf -o ERR${i}_chrX.gtf -l ERR${i} ERR${i}_chrX.bam done
+
+./stringtie --merge -G /home/yt/Documents/数据/chrX_data/genes/chrX.gtf -o /home/yt/Documents/数据/chrX_data/results/stringtie/stringtie_merged.gtf \
+/home/yt/Documents/数据/chrX_data/results/stringtie/mergelist.txt
+
+再次运行stringtie，组装转录本并估算基因表达丰度：
+./stringtie -e -B -G /home/yt/Documents/数据/chrX_data/results/stringtie/stringtie_merged.gtf \
+-o /home/yt/Documents/数据/chrX_data/results/ballgown/ballgown.ERR188383 /home/yt/Documents/数据/chrX_data/results/stringtie/bam/ERR188383.sort.bam
+StringTie使用-B参数直接生成Ballgown的输入文件，Cufflinks的输出结果需要使用Tablemaker生成Ballgown的输入文件。
+一个有5个输入文件，分别是：
+e_data.ctab，外显子水平表达量；
+i_data.ctab，内含子水平表达量；
+t_data.ctab，转录本水平表达量；
+e2t.ctab，外显子与转录本的对应关系；
+i2t.ctab，内含子与转录本的对应关系。
+
+setwd('/home/yt/Documents/数据/chrX_data')
+pheno_data = read.csv("geuvadis_phenodata.csv")
+library(ballgown)
+library(RSkittleBrewer)
+library(genefilter)
+library(dplyr)
+library(devtools)
+bg_chrX = ballgown(dataDir = "/home/yt/Documents/数据/chrX_data/results/ballgown", samplePattern = "ERR", pData=pheno_data)
+bg_chrX_filt = subset(bg_chrX,"rowVars(texpr(bg_chrX)) >1",genomesubset=TRUE)
+results_transcripts = stattest(bg_chrX_filt,feature="transcript",covariate="sex",adjustvars = c("population"), getFC=TRUE, meas="FPKM")
+results_genes = stattest(bg_chrX_filt, feature="gene", covariate="sex", adjustvars = c("population"), getFC=TRUE,meas="FPKM")
+results_transcripts = data.frame(geneNames=ballgown::geneNames(bg_chrX_filt), geneIDs=ballgown::geneIDs(bg_chrX_filt), results_transcripts)
+results_transcripts = arrange(results_transcripts,pval)
+results_genes = arrange(results_genes,pval)
+write.csv(results_transcripts, "chrX_transcript_results.csv", row.names=FALSE)
+write.csv(results_genes, "chrX_gene_results.csv",row.names=FALSE)
+
+subset(results_transcripts,results_transcripts$qval<0.05)
+
+subset(results_genes,results_genes$qval<0.05)
+
+数据可视化：
+#按照p-value从小到大排序
+> result_transcripts=arrange(result_transcripts,pval) 
+> result_genes=arrange(result_genes,pval)
+#把两个结果写入到csv文件中
+> write.csv(result_transcripts, "chrX_transcript_results.csv",row.names=FALSE)
+> write.csv(result_genes, "chrX_gene_results.csv",row.names=FALSE)
+#从以上的输出中筛选出q值小于0.05的transcripts和genes，即性别间表达有差异的基因
+> subset(result_transcripts,result_transcripts$qval<0.05)
+> subset(result_genes,result_genes$qval<0.05)
+#赋予调色板五个指定颜色
+> tropical= c('darkorange', 'dodgerblue','hotpink', 'limegreen', 'yellow') 
+> palette(tropical)
+#以FPKM为参考值作图，以性别作为区分条件
+> fpkm = texpr(bg_chrX,meas="FPKM")
+#方便作图将其log转换，+1是为了避免出现log2(0)的情况
+> fpkm = log2(fpkm+1)
+>boxplot(fpkm,col=as.numeric(pheno_data$sex),las=2,ylab='log2(FPKM+1)')
+
+#查看单个转录本在样品中的分布，如图，并绘制箱线图
+> ballgown::transcriptNames(bg_chrX)[12] 
+> ballgown::geneNames(bg_chrX)[12]
+>plot(fpkm[12,] ~ pheno_data$sex, border=c(1,2), main=paste(ballgown::geneNames(bg_chrX)[12],' : ', ballgown::transcriptNames(bg_chrX)[12]),pch=19, xlab="Sex", ylab='log2(FPKM+1)')
+>points(fpkm[12,] ~ jitter(as.numeric(pheno_data$sex)), col=as.numeric(pheno_data$sex))
+
+# plotTranscripts函数可以根据指定基因的id画出在特定区段的转录本，可以通过sample函数指定看在某个样本中的表达情况，这里选用id=1750, sample=ERR188234
+> plotTranscripts(ballgown::geneIDs(bg_chrX)[1750], bg_chrX, main=c('Gene MSTRG.575 in sample ERR188234'), sample=c('ERR188234'))
+
+# 这里以id=575的基因为例（对应上一步作图）
+> plotMeans('MSTRG.575', bg_chrX_filt,groupvar="sex",legend=FALSE)
+
+3.1.2
 gencode.mouse.annotation.gtf文件在/data/mouse_annotation/ 目录下：
 单样本组装：
 stringtie -p 8 -G /data/mouse_annotation/gencode.mouse.annotation.gtf -o cleandata/stringtiedata/CK-4.gtf cleandata/samtools_bam/CK-4_sort.bam
@@ -80,6 +191,14 @@ RSkittleBrewer（用于设置颜色）
 genefilter（用于快速计算均值和方差）
 dplyr（用于分类和排列结果）
 devtools（用于再现性和安装包）
+
+source("https://bioconductor.org/biocLite.R")　　　#Bioconductor软件库
+biocLite(pkgs = c("ballgown"))　　      　
+biocLite(pkgs = c("genefilter"))　　　　　　　 
+biocLite(pkgs = c("RSkittleBrewer"))　　　　　　　
+biocLite(pkgs = c("ggplot２"))　
+biocLite(pkgs = c("devtools"))　
+biocLite(pkgs = c("dplyr"))　
 
 1. 安装
 source("https://bioconductor.org/biocLite.R") 
