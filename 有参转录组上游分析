@@ -1,3 +1,25 @@
+一个真正意义上的全转录组，包括哪些内容呢？
+
+编码RNA    
+
+非编码RNA
+
+非编码大RNA：lncRNA和rRNA
+
+非编码小RNA：
+
+tRNA
+
+核酶
+
+细胞器的RNA组分
+
+小分子RNA：
+
+miRNA
+
+piRNA、snRNA、snoRNA等等
+
 软件列举
 质控：fastqc ,multiqc , trimmomatic, cutadapt, trim-galore
 比对：star , hisat2 , tophat , bowtie2 , bwa , subread
@@ -71,8 +93,7 @@ done
 #--split-3：如果是双端测序数据，则输出两个文件，如果不是则只输出一个文件
 
 3.1： fastqc对fastq文件进行质检
-fastqc
-fastqc -o <output dir> <seqfile1,seqfile2..>
+
 fastqc *.gz
 fastqc -q -t 4 -o ./fastqc_result/ *.fastq.gz &
  
@@ -80,7 +101,9 @@ fastqc -q -t 4 -o ./fastqc_result/ *.fastq.gz &
 #具体接头查询地点：github-fastqc 或者：Download common Illumina adapters
 
 3.2： multiqc可以对几个fastqc报告文件进行总结并汇总到一个报告文件中，以更直观到防止展示。
-multiqc <analysis directory> 
+
+fastqc -t 16 -o ./ ./*.fq.gz
+multiqc ./*zip -o ./
 
 3.3：查看Q30
 /data/pub/youmengcheng/ymc/biosoft/fqcheck -InFq1 C_1_R1_val_1.fq.gz -OutStat1 C_1_R1_val_1 -InFq2 C_1_R2_val_2.fq.gz -OutStat2 C_1_R2_val_2
@@ -102,6 +125,11 @@ LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36
 ## 所以只需要把参数放对位置即可！
 
 4.2： trim_galore
+
+cat ../SRR_Acc_List.txt | while read id
+do
+echo "trim_galore --length 35 --paired --retain_unpaired --cores 16 -o ./ ${id}_rm_1.fq.gz ${id}_rm_2.fq.gz"
+done > trim.sh
 
 trim_galore -output_dir clean --paired --length 75 --quality 25 --stringency 5 seq_1.fasq.gz seq_2.fastq.gz
 
@@ -143,6 +171,19 @@ fastp -f 10 -F 10 --adapter_sequence AGATCGGAAGAGCACACGTCTGAAC --adapter_sequenc
 
 5.1： hisat2
 
+去除rRNA
+hisat2-build -p 4 rRNA.fasta rRNA
+for i in {48..53}
+do
+a0="hisat2 -x ~/reference/linux/hisat2/otherRNA/rRNA "
+a1="-1 SRR111783${i}_1.fastq.gz "
+a2="-2 SRR111783${i}_2.fastq.gz "
+a3="--un-conc-gz ../2.rrRNA/SRR111783${i}_rmr_%.fq.gz -p 16 -S ../2.rrRNA/SRR111783${i}.sam"
+echo $a0$a1$a2$a3 
+done > rmRNA.sh
+
+nohup bash rmRNA.sh &
+
 5.1.1：hisat2建立索引文件
 hisat2-build –p 4 genome.fa genome
 extract_exons.py Homo_sapiens.GRCh38.83.chr.gtf > genome.exon
@@ -160,6 +201,10 @@ hisat2 -t -p 10 -x /data/pub/youmengcheng/ymc/index/hisat2-index/cpap_ref -1 /da
 -S /data/pub/youmengcheng/ymc/cpap/PRNA202178TY_S11.sam
 
 5.2:STAR
+
+conda安装
+conda install -c bioconda star
+
 5.2.1:建立索引
 STAR --runThreadN 20 --runMode genomeGenerate \
 --genomeDir /data/pub/youmengcheng/ymc/index/star-index/ \   #构建好的索引放在这个位置
@@ -172,6 +217,42 @@ STAR --runThreadN 20 --runMode genomeGenerate \
 --genomeDir 构建好的参考基因组存放的位置，最好是单独建立的一个文件夹
 --genomeFastaFiles 参考基因组序列文件
 --sjdbGTFfile 基因注释文件
+
+fastq文件比对到基因组
+比对定量部分
+STAR --runThreadN 12    # 12线程
+--genomeDir ~/reference/linux/STAR/STAR_GRCh38_genecode_v33/ref_genome.fa.star.idx/    # 参考基因组索引所在位置
+--outSAMtype BAM SortedByCoordinate    # 输出经过坐标排序的BAM文件
+--outReadsUnmapped Fastx   # 输出没能比对到基因组上的序列，格式与输入文件相同
+--quantMode GeneCounts TranscriptomeSAM    # 输出基因的Read Count文件以及转录本定量的SAM文件
+--readFilesCommand zcat    # 输入的fastq文件经过gzip压缩
+--twopassMode Basic    # STAR特有，两次对比模式
+--readFilesIn ${id}_1_val_1.fq.gz ${id}_2_val_2.fq.gz    # 输入文件的名称
+--outFileNamePrefix ${id}    # 输出文件的前缀
+
+可变剪切部分
+## 以下参数设置来自ENCODE官方，有些解释很难翻译成中文，参见下图
+--outFilterMultimapNmax 20    # 如果一个读段被多重比对超过20次，则认为这个读段不能被比对到基因组
+--outFilterMismatchNmax 999    # 每对读段允许错配999个碱基（相当于不过滤）
+--outFilterMismatchNoverReadLmax 0.04    # 每对读段允许出现读长*4%的碱基错配，即PE150允许2*150*0.04=12个碱基错配
+--alignIntronMin 20    # 内含子最短是20个碱基
+--alignIntronMax 1000000    # 内含子最长是1000000个碱基
+--alignMatesGapMax 1000000    # 一对读段之间最长距离为1000000个碱基
+
+
+## 以下参数设置来自ENCODE官方，有些解释很难翻译成中文，参见下图
+--outFilterType BySJout    # 对junction进行过滤以减少错误
+--alignSJoverhangMin 8    # 未注释过的junction的最少的overhang是8个碱基
+--alignSJDBoverhangMin 1    # 注释过的junction的最少的overhang是1个碱基
+
+## 其他参数
+--alignSJstitchMismatchNmax 0 -1 0 0    # 允许剪切点错配的个数（-1代表无限制）四个数字分别代表(1)非经典；(2)GT/AG或CT/AC；(3)GC/AG或CT/GC(4)AT/AC或GT/AT
+
+融合基因部分
+--chimSegmentMin 20    # 每对嵌合读段较短的一端至少有20个碱基，即PE150允许280+20结构的融合基因
+--chimOutJunctionFormat 1    # 输出的Chimeric.out.junction文件可直接用于融合基因
+--chimSegmentReadGapMax 0    # 嵌合读段之间不允许空位
+--chimJunctionOverhangMin 20    # 嵌合的junction的最少的overhang是20个碱基，为了过滤非常短的外显子，即连续剪切事件
 
 STAR 
 --runThreadN 20 \
@@ -197,13 +278,11 @@ STAR --genomeDir /data/pub/youmengcheng/ymc/index/star-index/ --runThreadN 10
 –readFilesIn 输入文件的位置，对于双末端测序文件，用空格分隔开就行了
 –outSAMtype 默认输出的是sam文件，我们这里的BAM SortedByCoordinate是让他输出为ban文件，并排序
 –outFileNamePrefix 表示的是输出文件的位置和前缀
+
 生成的文件：
 Chimeric.out.junction  融合转录本
-
 Aligned.sortedByCoord.out.bam  比对输出
-
 Aligned.toTranscriptome.out.bam 转录本比对输出
-
 SJ.out.tab 可变剪切结果输出
 
 Aligned.out.sam或者Aligned.out.bam
@@ -216,11 +295,6 @@ Log.final.out
 它包含的是对比完以后的对比统计信息
 SJ.out.tab
 它包含了剪切的信息
-
-5.3： tophat2
-
-tophat2 -p 2 -G /data/plant_genome/Lj3.0/Lj3.0_gene.gtf -o tophat_output /data/plant_genome/Lj3.0/Lj3.0_genome root20d_R1.fa root20d_R2.fa
-
 
 
 6： samtools
