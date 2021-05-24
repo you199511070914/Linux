@@ -1,24 +1,11 @@
 一个真正意义上的全转录组，包括哪些内容呢？
 
-编码RNA    
-
-非编码RNA
-
-非编码大RNA：lncRNA和rRNA
-
-非编码小RNA：
-
-tRNA
-
-核酶
-
+编码RNA 
+非编码RNA 
+非编码大RNA：lncRNA和rRNA 
+非编码小RNA：tRNA核酶
 细胞器的RNA组分
-
-小分子RNA：
-
-miRNA
-
-piRNA、snRNA、snoRNA等等
+小分子RNA：miRNA、piRNA、snRNA、snoRNA等等
 
 软件列举
 质控：fastqc ,multiqc , trimmomatic, cutadapt, trim-galore
@@ -167,11 +154,12 @@ fastp -f 10 -F 10 --adapter_sequence AGATCGGAAGAGCACACGTCTGAAC --adapter_sequenc
 -i PRNA202178TY_S11_R1.fastq -I PRNA202178TY_S11_R2.fastq \
 -o S_11_R1.fastq -O S_11_R2.fastq
 
-5： 把整理好的数据和参考基因组序列进行比对，寻找每个reads的最佳匹配位置。可以使用HISAT2，tophat2，STAR等软件。
+5： 把整理好的数据和参考基因组序列进行比对，寻找每个reads的最佳匹配位置。可以使用HISAT2，STAR等软件。
 
 5.1： hisat2
 
-去除rRNA
+5.1.0:hisat2去除rRNA
+
 hisat2-build -p 4 rRNA.fasta rRNA
 for i in {48..53}
 do
@@ -312,6 +300,20 @@ done
 
 samtools sort C_12.bam C_12_sorted
 samtools index PRNA202178TY_S_2_val_sorted.bam
+
+6.2：bam & sam文件转fasta文件
+samtools view input.bam | awk '{OFS="\t"; print ">"$1"\n"$10}' - > output.fasta
+cat *.sam | awk '{print ">"$1"\n"$10}' > *.fasta
+
+6.3：bam文件转成fastq文件
+samtools sort -n input.bam -o input_sorted.bam  
+bedtools bamtofastq -i input_sorted.bam -fq output_r1.fastq -fq2 output_r2.fastq
+
+samtools sort -n SAMPLE.bam -o SAMPLE_sorted.bam
+samtools fastq -@ 8 SAMPLE_sorted.bam \
+    -1 SAMPLE_R1.fastq.gz \
+    -2 SAMPLE_R2.fastq.gz \
+    -0 /dev/null -s /dev/null -n
 
 7：计数
 7.1： htseq-count 是一款用于reads计数的软件，他能对位于基因组上的一些单位的reads数进行统计，这里所说的单位主要是指染色体上的一组位置区间（我们常见的就是gene exon）。
