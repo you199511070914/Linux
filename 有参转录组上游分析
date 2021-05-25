@@ -286,14 +286,14 @@ SJ.out.tab
 
 
 6： samtools
-samtools view -S seq.sam -b > seq.bam  #文件格式转换
+samtools view -bS seq.sam > seq.bam  #文件格式转换
 samtools sort seq.bam -o seq_sorted.bam  ##将bam文件排序
 samtools index seq_sorted.bam  #对排序后对bam文件索引生成bai格式文件，用于快速随机处理。
 samtools flagstate seq_sorted.bam > seq_sorted.flagstate
 
 for i in `seq 1 1`
 do
-    samtools view -S ZL1_2.sam -b > ZL1_2.bam
+    samtools view -bS ZL1_2.sam > ZL1_2.bam
     samtools sort ZL1_1.bam -o ZL1_1_sorted.bam
     samtools index ZL1_1_sorted.bam
 done
@@ -337,3 +337,15 @@ featureCounts -T 6 -p -t exon -g gene_id -a /data/pub/youmengcheng/ymc/reference
 # -p参数是针对paired-end 数据
 # -a输入GTF/GFF 注释文件
 # -o输出文件
+
+如果没有特别需求，STAR比对的时候就不要sort by coordinate了！！！sort一般都是为了建index
+
+不同参数的比较：
+featureCounts -p -Q 10 -s 0 -T $cpu -a $gtf-o $out_dir/${sName}.all.counts.txt $out_dir/${sName}.hg19Aligned.out.bam    #73.1%
+
+featureCounts -p -Q 10 -M -s 0 -T $cpu -a $gtf -o $out_dir/${sName}.all.counts.txt2 $out_dir/${sName}.hg19Aligned.out.bam    #73.1%
+
+featureCounts -p -Q 10 -B -s 0 -T $cpu -a $gtf -o $out_dir/${sName}.all.counts.txt3 $out_dir/${sName}.hg19Aligned.out.bam    #73.0%
+
+featureCounts -p -Q 10 --ignoreDup -s 0 -T $cpu -a $gtf -o $out_dir/${sName}.all.counts.txt4 $out_dir/${sName}.hg19Aligned.out.bam    #73.1%
+
