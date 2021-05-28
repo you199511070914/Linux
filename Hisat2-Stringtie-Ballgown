@@ -58,7 +58,29 @@ wget http://ccb.jhu.edu/software/stringtie/dl/stringtie-2.0.4.Linux_x86_64.tar.g
 tar -zvxf stringtie-2.0.4.Linux_x86_64.tar.gz
 echo 'export PATH=/home/yt/biotools/stringtie-2.0.4.Linux_x86_64:$PATH' >> ~/.bashrc
 
+stringtie -p 8 -G /data/pub/youmengcheng/ymc/reference/Clostridium_papyrosolvens_dsm_2782_gca_000175795.ASM17579v2.50.gtf \
+-o /data/pub/youmengcheng/ymc/cleandata/fq/c_12.gtf /data/pub/youmengcheng/ymc/cleandata/fq/c_12_sorted.bam
 
+mkdir stringtiedata
+mv *.gtf /data/pub/youmengcheng/ymc/cleandata/fq/stringtiedata
+
+cd /data/pub/youmengcheng/ymc/cleandata/fq/stringtiedata
+touch mergelist.txt
+vi mergelist.txt
+/data/pub/youmengcheng/ymc/cleandata/fq/stringtiedata/c_1.gtf
+/data/pub/youmengcheng/ymc/cleandata/fq/stringtiedata/c_12.gtf
+/data/pub/youmengcheng/ymc/cleandata/fq/stringtiedata/s_2.gtf
+/data/pub/youmengcheng/ymc/cleandata/fq/stringtiedata/s_11.gtf
+
+stringtie --merge -p 8 -G /data/pub/youmengcheng/ymc/reference/Clostridium_papyrosolvens_dsm_2782_gca_000175795.ASM17579v2.50.gtf \
+-o /data/pub/youmengcheng/ymc/cleandata/fq/stringtiedata/stringtie_merged.gtf \
+/data/pub/youmengcheng/ymc/cleandata/fq/stringtiedata/mergelist.txt
+
+mkdir /data/pub/youmengcheng/ymc/cleandata/fq/ballgown
+stringtie -e -B -p 8 -G /data/pub/youmengcheng/ymc/cleandata/fq/stringtiedata/stringtie_merged.gtf \
+-o /data/pub/youmengcheng/ymc/cleandata/fq/ballgown/c_12/c_12.gtf /data/pub/youmengcheng/ymc/cleandata/fq/c_12_sorted.bam
+
+prepDE.py -i /data/pub/youmengcheng/ymc/cleandata/fq/ballgown/
 1.单样本转录本组装
 3.1.1
 进行拼接：会对每个bam文件生产一个gtf文件，主要记录i转录本的组装信息。
