@@ -1,0 +1,127 @@
+1 读取数据
+rm(list = ls())
+options(stringsAsFactors = F)
+#install.packages("rio")
+library(tidyverse)
+library(AnnotationForge)
+
+# 当你发现用read.table, read.csv出错时，用import是个不错的选择
+egg <- rio::import('D:/R语言生信下游分析/ensembl_cpap/cpap.emapper.annotations.tsv')
+#egg[egg==""] <- NA 
+egg[egg=="-"] <- NA
+colnames(egg)
+colnames(egg) <- c("query","seed_ortholog","evalue","score","eggNOG_OGs","max_annot_lvl",
+"COG_category","Description","Preferred_name","GOs","EC","KEGG_ko","KEGG_Pathway",
+"KEGG_Module","KEGG_Reaction","KEGG_rclass","BRITE","KEGG_TC","CAZy","BiGG_Reaction","PFAMs")
+
+2 提取基因ID
+#重点是需要两列，一列是ID，一列是name（第二列不一定是真的name，但必须要有，比如看下面的示例）
+#要注意，要保证你的数据中存在query_name和seed_eggNOG_ortholog这样的列名下面代码才能运行，或者修改代码匹配自己的列名即可
+gene_info <- egg %>%
+  dplyr::select(GID = query_name, GENENAME = seed_ortholog) %>% na.omit()
+  
+3 提取基因与GO的对应
+gterms <- egg %>%
+  dplyr::select(query_name, GOs) %>% na.omit()
+  
+4 再将gterms的每一行中GO按照逗号分开
+# 之前的代码是用for循环，但是速度很感人，现在直接上sapply
+library(stringr)
+all_go_list=str_split(gterms$GOs,",")
+gene2go <- data.frame(GID = rep(gterms$query_name,
+                                   times = sapply(all_go_list, length)),
+                         GO = unlist(all_go_list),
+                         EVIDENCE = "IEA")
+5 提取基因与KEGG的对应
+gene2ko <- egg %>%
+  dplyr::select(GID = query_name, KO = KEGG_ko) %>%
+  na.omit()
+6 对json文件操作
+https://www.genome.jp/kegg-bin/get_htext?ko00001
+download json
+
+if(!file.exists('D:/R语言生信下游分析/ensembl_cpap/kegg_info.RData')){
+  
+  library(jsonlite)
+  library(purrr)
+  library(RCurl)
+  
+  update_kegg <- function(json = "ko00001.json",file="D:/R语言生信下游分析/ensembl_cpap/ko00001.json") {
+    pathway2name <- tibble(Pathway = character(), Name = character())
+    ko2pathway <- tibble(Ko = character(), Pathway = character())
+    
+    kegg <- fromJSON(json)
+    
+    for (a in seq_along(kegg[["children"]][["children"]])) {
+      A <- kegg[["children"]][["name"]][[a]]
+      
+      for (b in seq_along(kegg[["children"]][["children"]][[a]][["children"]])) {
+        B <- kegg[["children"]][["children"]][[a]][["name"]][[b]] 
+        
+        for (c in seq_along(kegg[["children"]][["children"]][[a]][["children"]][[b]][["children"]])) {
+          pathway_info <- kegg[["children"]][["children"]][[a]][["children"]][[b]][["name"]][[c]]
+          
+          pathway_id <- str_match(pathway_info, "ko[0-9]{5}")[1]
+          pathway_name <- str_replace(pathway_info, " \\[PATH:ko[0-9]{5}\\]", "") %>% str_replace("[0-9]{5} ", "")
+          pathway2name <- rbind(pathway2name, tibble(Pathway = pathway_id, Name = pathway_name))
+          
+          kos_info <- kegg[["children"]][["children"]][[a]][["children"]][[b]][["children"]][[c]][["name"]]
+          
+          kos <- str_match(kos_info, "K[0-9]*")[,1]
+          
+          ko2pathway <- rbind(ko2pathway, tibble(Ko = kos, Pathway = rep(pathway_id, length(kos))))
+        }
+      }
+    }
+    
+    save(pathway2name, ko2pathway, file = file)
+  }
+  
+  update_kegg(json = "D:/R语言生信下游分析/ensembl_cpap/ko00001.json",file="D:/R语言生信下游分析/ensembl_cpap/kegg_info.RData")
+  
+}
+load("D:/R语言生信下游分析/ensembl_cpap/kegg_info.RData")
+7 利用gene2ko与ko2pathway将基因与pathway对应起来
+# 在运行数据框合并前，需要做到两个数据框的列名是对应的，并且将原来gene2ko中的ko修改一下
+colnames(ko2pathway)=c("KO",'Pathway')
+library(stringr)
+gene2ko$KO=str_replace(gene2ko$KO,"ko:","")
+
+# 合并代码是：
+gene2pathway <- gene2ko %>% left_join(ko2pathway, by = "KO") %>% 
+  dplyr::select(GID, Pathway) %>%
+  na.omit()
+  
+8 现在有了基因分别于GO、KEGG的对应，下面就要构建了
+library(AnnotationForge)
+makeOrgPackage(gene_info=gene_info,
+               go=gene2go,
+               ko=gene2ko,
+               maintainer='1351382072@qq.com',
+               author='1351382072@qq.com',
+               pathway=gene2pathway,
+               version="0.0.1",
+               outputDir = ".",
+               tax_id="588581",
+               genus='Ruminiclostridium',
+               species='papyrosolvens',
+               goTable="go")
+这些信息都填好后，运行即可，会构建出一个org.xxx.eg.db的文件夹
+
+9 像安装R包一样，来安装物种注释包
+install.packages('org.your_species.eg.db',repos = NULL, type="source")
+# 然后加载
+library(org.your_species.eg.db)
+10 最后，就可以随意富集分析啦！
+注意：下面的keyType要用GID，如果前面的列名和我保持一样的话，否则就改成自己包含GID的那个列名即可
+
+ego_all <- enrichGO(gene = glist,
+                keyType="GID",
+                #模式物种
+                #OrgDb = org.Mm.eg.db,
+                #非模式物种
+                OrgDb = org.your_species.eg.db,
+                ont = "ALL", #ALL或BP或MF或CC
+                pAdjustMethod = "BH",
+                #pvalueCutoff  = 0.01,
+                qvalueCutoff  = 0.05) 
