@@ -1,3 +1,22 @@
+ssh -p 22022 pub@115.24.3.211  ：pub
+conda activate egg
+cd /home/pub/miniconda3/envs/egg/lib/python3.9/site-packages/data 
+python /home/pub/miniconda3/envs/egg/bin/download_eggnog_data.py -P -H -d 186801,538999,186813,31979 -f
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 1 读取数据
 rm(list = ls())
 options(stringsAsFactors = F)
