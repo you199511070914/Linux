@@ -33,25 +33,25 @@ colnames(egg)
 
 2 提取基因ID
 #重点是需要两列，一列是ID，一列是name（第二列不一定是真的name，但必须要有，比如看下面的示例）
-#要注意，要保证你的数据中存在query_name和seed_eggNOG_ortholog这样的列名下面代码才能运行，或者修改代码匹配自己的列名即可
+#要注意，要保证你的数据中存在query和seed_eggNOG_ortholog这样的列名下面代码才能运行，或者修改代码匹配自己的列名即可
 gene_info <- egg %>%
-  dplyr::select(GID = query_name, GENENAME = seed_ortholog) %>% na.omit()
+  dplyr::select(GID = query, GENENAME = seed_ortholog) %>% na.omit()
   
 3 提取基因与GO的对应
 gterms <- egg %>%
-  dplyr::select(query_name, GOs) %>% na.omit()
+  dplyr::select(query, GOs) %>% na.omit()
   
 4 再将gterms的每一行中GO按照逗号分开
 # 之前的代码是用for循环，但是速度很感人，现在直接上sapply
 library(stringr)
 all_go_list=str_split(gterms$GOs,",")
-gene2go <- data.frame(GID = rep(gterms$query_name,
+gene2go <- data.frame(GID = rep(gterms$query,
                                    times = sapply(all_go_list, length)),
                          GO = unlist(all_go_list),
                          EVIDENCE = "IEA")
 5 提取基因与KEGG的对应
 gene2ko <- egg %>%
-  dplyr::select(GID = query_name, KO = KEGG_ko) %>%
+  dplyr::select(GID = query, KO = KEGG_ko) %>%
   na.omit()
 6 对json文件操作
 https://www.genome.jp/kegg-bin/get_htext?ko00001
