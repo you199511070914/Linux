@@ -114,7 +114,7 @@ library(AnnotationForge)
 makeOrgPackage(gene_info=gene_info,
                go=gene2go,
                ko=gene2ko,
-               maintainer='1351382072@qq.com',
+               maintainer='<1351382072@qq.com>',
                author='1351382072@qq.com',
                pathway=gene2pathway,
                version="0.0.1",
@@ -123,22 +123,82 @@ makeOrgPackage(gene_info=gene_info,
                genus='Ruminiclostridium',
                species='papyrosolvens',
                goTable="go")
-这些信息都填好后，运行即可，会构建出一个org.xxx.eg.db的文件夹
+这些信息都填好后，运行即可，会构建出一个org.Rpapyrosolvens.eg.db的文件夹
 
 9 像安装R包一样，来安装物种注释包
-install.packages('org.your_species.eg.db',repos = NULL, type="source")
+install.packages("./org.Rpapyrosolvens.eg.db",repos = NULL,type="source")
 # 然后加载
-library(org.your_species.eg.db)
+library(org.Rpapyrosolvens.eg.db)
 10 最后，就可以随意富集分析啦！
 注意：下面的keyType要用GID，如果前面的列名和我保持一样的话，否则就改成自己包含GID的那个列名即可
 
+glist <- gene_info[,1]
+glist <- glist[2396:2497]
 ego_all <- enrichGO(gene = glist,
                 keyType="GID",
                 #模式物种
                 #OrgDb = org.Mm.eg.db,
                 #非模式物种
-                OrgDb = org.your_species.eg.db,
+                OrgDb = org.Rpapyrosolvens.eg.db,
                 ont = "ALL", #ALL或BP或MF或CC
                 pAdjustMethod = "BH",
-                #pvalueCutoff  = 0.01,
-                qvalueCutoff  = 0.05) 
+                #pvalueCutoff  = 1,
+                qvalueCutoff  = 1) 
+                
+                
+# KEGG
+########################################
+if(F){
+  library(purrr)
+  library(tidyverse)
+  library(clusterProfiler)
+  
+########################################################################################
+  
+  ################################################
+  # 导入自己构建的 OrgDb
+  ################################################
+  library(org.Rpapyrosolvens.eg.db)
+  columns(org.Rpapyrosolvens.eg.db)
+  
+  ########################################################################################
+  # 导入需要进行富集分析的基因列表，并转换为向量
+  #########################################################################################
+  
+  gene_list <- DEGs[,1]
+    
+    ################################################
+  # 从 OrgDB 提取 Pathway 和基因的对应关系
+  ################################################
+  
+  pathway2gene <- AnnotationDbi::select(org.Rpapyrosolvens.eg.db, 
+                                        keys = keys(org.Rpapyrosolvens.eg.db), 
+                                        columns = c("Pathway","Ko")) %>%
+    na.omit() %>%
+    dplyr::select(Pathway, GID)
+  
+  ################################################
+  # 导入 Pathway 与名称对应关系
+  ################################################
+  load("kegg_info.RData")
+  
+   #KEGG pathway 富集
+  ekp <- enricher(gene_list, 
+                  TERM2GENE = pathway2gene, 
+                  TERM2NAME = pathway2name, 
+                  pvalueCutoff = 1, 
+                  qvalueCutoff = 1,
+                  pAdjustMethod = "BH",
+                  minGSSize = 1)
+  
+  ekp_results <- as.data.frame(ekp)
+  
+  barplot(ekp, showCategory=20,color="pvalue",
+          font.size=10)
+  dotplot(ekp)
+  
+  emapplot(ekp)
+  
+  
+  
+}
