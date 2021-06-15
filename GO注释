@@ -132,9 +132,14 @@ library(org.Rpapyrosolvens.eg.db)
 10 最后，就可以随意富集分析啦！
 注意：下面的keyType要用GID，如果前面的列名和我保持一样的话，否则就改成自己包含GID的那个列名即可
 
-glist <- gene_info[,1]
-glist <- glist[2396:2497]
-ego_all <- enrichGO(gene = glist,
+library(enrichplot)
+GO富集分析
+
+sam <- read.table('D:/R语言生信下游分析/ensembl_cpap/finally.txt')
+view(sam)
+sam_gene <- sam$V1
+
+go <- enrichGO(gene = sam_gene,
                 keyType="GID",
                 #模式物种
                 #OrgDb = org.Mm.eg.db,
@@ -144,61 +149,38 @@ ego_all <- enrichGO(gene = glist,
                 pAdjustMethod = "BH",
                 #pvalueCutoff  = 1,
                 qvalueCutoff  = 1) 
-                
-                
-# KEGG
-########################################
-if(F){
-  library(purrr)
-  library(tidyverse)
-  library(clusterProfiler)
+
+go <- enrichGO(sam_gene, OrgDb=org.Rpapyrosolvens.eg.db,keyType = "GID", pvalueCutoff=0.5, qvalueCutoff=0.5)
+dotplot(go,orderBy="x")
+cnetplot(go)
+goplot(go)
+x2 <- pairwise_termsim(go)
+emapplot(x2)
+
+KEGG富集分析
+
+# 导入自己构建的 OrgDb
+library(org.Rpapyrosolvens.eg.db)
+columns(org.Rpapyrosolvens.eg.db)
   
-########################################################################################
-  
-  ################################################
-  # 导入自己构建的 OrgDb
-  ################################################
-  library(org.Rpapyrosolvens.eg.db)
-  columns(org.Rpapyrosolvens.eg.db)
-  
-  ########################################################################################
-  # 导入需要进行富集分析的基因列表，并转换为向量
-  #########################################################################################
-  
-  gene_list <- DEGs[,1]
-    
-    ################################################
-  # 从 OrgDB 提取 Pathway 和基因的对应关系
-  ################################################
-  
-  pathway2gene <- AnnotationDbi::select(org.Rpapyrosolvens.eg.db, 
+
+# 从 OrgDB 提取 Pathway 和基因的对应关系
+pathway2gene <- AnnotationDbi::select(org.Rpapyrosolvens.eg.db, 
                                         keys = keys(org.Rpapyrosolvens.eg.db), 
-                                        columns = c("Pathway","Ko")) %>%
+                                        columns = c("Pathway","KO")) %>%
     na.omit() %>%
     dplyr::select(Pathway, GID)
   
-  ################################################
-  # 导入 Pathway 与名称对应关系
-  ################################################
-  load("kegg_info.RData")
-  
-   #KEGG pathway 富集
-  ekp <- enricher(gene_list, 
+#KEGG pathway 富集
+ekp <- enricher(sam_gene, 
                   TERM2GENE = pathway2gene, 
                   TERM2NAME = pathway2name, 
-                  pvalueCutoff = 1, 
-                  qvalueCutoff = 1,
-                  pAdjustMethod = "BH",
-                  minGSSize = 1)
-  
-  ekp_results <- as.data.frame(ekp)
-  
-  barplot(ekp, showCategory=20,color="pvalue",
-          font.size=10)
-  dotplot(ekp)
-  
-  emapplot(ekp)
-  
-  
-  
-}
+                  pvalueCutoff = 0.5, 
+                  qvalueCutoff = 0.5,
+                  pAdjustMethod = "BH")
+ 
+dotplot(ekp)
+cnetplot(ekp)
+x1 <- pairwise_termsim(ekp)
+emapplot(x1)
+
