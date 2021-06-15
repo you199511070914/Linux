@@ -132,12 +132,60 @@ library(org.Rpapyrosolvens.eg.db)
 10 最后，就可以随意富集分析啦！
 注意：下面的keyType要用GID，如果前面的列名和我保持一样的话，否则就改成自己包含GID的那个列名即可
 
-library(enrichplot)
-GO富集分析
+res <- res[order(res$padj),]
+deseq.sig <- subset(res,padj < 0.05 & abs(log2FoldChange) >1 )    #挑取差异表达较大的基因
+row.names(deseq.sig)
+paste("588581.",row.names(deseq.sig),sep="")
+xx <- paste("588581.",row.names(deseq.sig),sep="")
+write.table(xx,"D:/R语言生信下游分析/ensembl_cpap/xx.txt",row.names=F)    #准备将差异表达基因更换格式：将588581.Cpap_xxxx更换为EGDxxxxx格式
+
+def read_gene_info(path1):
+    total_list=[]
+    with open(path1, "r")as fp:
+        lines = fp.readlines()
+        for line in lines:
+            protein_dict={}
+            #print(line)
+            line=line.split(" ")
+            #print(line)
+            protein_name=line[0].strip('""')
+            protein_dict[protein_name]=""
+            #protein_name=protein_name
+            #print(protein_name)
+            gene_name = line[1].strip("\n").strip('""')
+            #print(gene_name)
+            protein_dict[protein_name]+=gene_name
+            total_list.append(protein_dict)
+    #print(total_list)
+    print(len(total_list))
+    return total_list
+def all_list(path,total_list):
+    with open("D:/R语言生信下游分析/ensembl_cpap/finally.txt",'w')as fp:
+        with open(path, "r")as file:
+            lines = file.readlines()
+            print(len(lines))
+            for line in lines:
+                line=line.strip("\n").strip('""')
+                #print(line)
+                for i in total_list:
+                    for number in i.keys():
+                        if i[number] == line:
+                            print(number)
+                            fp.write(number+'\n')
+def main():
+    path="D:/R语言生信下游分析/ensembl_cpap/xx.txt"
+    path1="D:/R语言生信下游分析/ensembl_cpap/gene_info.txt"
+    total_list=read_gene_info(path1)
+    all_list(path,total_list)
+if __name__=="__main__":
+    main()
 
 sam <- read.table('D:/R语言生信下游分析/ensembl_cpap/finally.txt')
 view(sam)
 sam_gene <- sam$V1
+
+library(enrichplot)
+GO富集分析
 
 go <- enrichGO(gene = sam_gene,
                 keyType="GID",
@@ -150,7 +198,7 @@ go <- enrichGO(gene = sam_gene,
                 #pvalueCutoff  = 1,
                 qvalueCutoff  = 1) 
 
-go <- enrichGO(sam_gene, OrgDb=org.Rpapyrosolvens.eg.db,keyType = "GID", pvalueCutoff=0.5, qvalueCutoff=0.5)
+go <- enrichGO(sam_gene, OrgDb=org.Rpapyrosolvens.eg.db,keyType = "GID",ont = "ALL", pAdjustMethod = "BH", qvalueCutoff=0.5)
 dotplot(go,orderBy="x")
 cnetplot(go)
 goplot(go)
