@@ -43,12 +43,17 @@ gterms <- egg %>%
   
 4 再将gterms的每一行中GO按照逗号分开
 # 之前的代码是用for循环，但是速度很感人，现在直接上sapply
+#
 library(stringr)
 all_go_list=str_split(gterms$GOs,",")
 gene2go <- data.frame(GID = rep(gterms$query,
                                    times = sapply(all_go_list, length)),
                          GO = unlist(all_go_list),
                          EVIDENCE = "IEA")
+#利用pfam得到的GO关系                        
+gene_pfam_go <- read.table("D:/R语言生信下游分析/ensembl_cpap_result/eggnog-mapper/gene_pfam_go.txt",sep = "\t",header =T)
+gene2go <- data.frame(GID = gene_pfam_go$EGD45653,GO = gene_pfam_go$GO.0055114,EVIDENCE = "IEA")
+
 5 提取基因与KEGG的对应
 gene2ko <- egg %>%
   dplyr::select(GID = query, KO = KEGG_ko) %>%
