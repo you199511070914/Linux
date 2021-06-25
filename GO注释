@@ -3,7 +3,10 @@ conda activate egg
 cd /home/pub/miniconda3/envs/egg/lib/python3.9/site-packages/data 
 python /home/pub/miniconda3/envs/egg/bin/download_eggnog_data.py -P -H -d 186801,538999,186813,31979 -f
 
+python /home/pub/miniconda3/envs/egg/bin/create_dbs.py -m diamond --dbname bacteria --taxa Bacteria
 
+python /home/pub/miniconda3/envs/egg/bin/emapper.py -i /data/pub/youmengcheng/ymc/eggnog/Clostridium_papyrosolvens_dsm_2782_gca_000175795.ASM17579v2.pep.all.fa \
+--dmnd_db /home/pub/miniconda3/envs/egg/lib/python3.9/site-packages/data/bacteria.dmnd --target_taxa 2 --output /data/pub/youmengcheng/ymc/eggnog/cpap --cpu 12
 
 
 
