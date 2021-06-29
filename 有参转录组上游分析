@@ -12,6 +12,9 @@
 比对：star , hisat2 , tophat , bowtie2 , bwa , subread
 计数：htseq , bedtools, salmon, featurecount
 
+github参考网址：https://github.com/twbattaglia/RNAseq-workflow
+
+
 fastq-dump: 最常用的，讲SRA数据转换为fastq格；
 prefetch: 下载sra数据
 sam-dump: 将 SRA 转换为sam格式，如果原始数据是sam或bam，就需要使用这个工具
